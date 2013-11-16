@@ -1,0 +1,3 @@
+*.pyc
+.*.sw[p-z]
+.DS_Store
