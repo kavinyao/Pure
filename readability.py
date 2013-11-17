@@ -157,6 +157,7 @@ class DensitometricFeatureExtractor(object):
             # crude word and lines count
             words = block.count(' ')
             lines = DensitometricFeatureExtractor.count_lines(block)
+            sentences = DensitometricFeatureExtractor.count_sentences(block)
 
             # extract link text
             link_text = AnchorUtil.extract_anchor_text(text_block)
@@ -165,27 +166,32 @@ class DensitometricFeatureExtractor(object):
             # prevent division by zero
             if words == 0: words = 1
             if lines == 0: lines = 1
+            if sentences == 0: sentences = 1
 
-            features.append([words, 1.0*words/lines, 1.0*link_words/words])
+            # number of words, average sentence length, text density, link density
+            features.append([1.0*words, 1.0*words/sentences, 1.0*words/lines, 1.0*link_words/words])
 
-        # add previous and next features
+        # add number of words quotient, avg. senence length quotient, text density quotient w.r.t. previous block
         n_features = len(features)
         for i in xrange(n_features):
-            previous = [0., 0., 0.] if i == 0 else features[i-1][:3]
-            next = [0., 0., 0.] if i+1 == n_features else features[i+1][:3]
-            features[i].extend(previous)
-            features[i].extend(next)
+            previous = features[i][:3] if i == 0 else features[i-1][:3]
+            new_features = [features[i][j]/previous[j] for j in range(3)]
+            features[i].extend(new_features)
 
         return features
 
     @staticmethod
-    def count_lines(text):
-        lines = 0
+    def count_sentences(text):
+        sentences = 0
         for c in text:
             if c in DensitometricFeatureExtractor.LINE_DELIMITERS:
-                lines += 1
+                sentences += 1
 
-        return lines
+        return sentences
+
+    @staticmethod
+    def count_lines(text):
+        return len(text) / 80
 
 
 class HTMLLoader(object):
