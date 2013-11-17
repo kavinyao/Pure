@@ -73,6 +73,14 @@ class L3SDocument(object):
 
         return feature_matrix, labels
 
+    def extract_article(self, block_classes):
+        article_blocks = []
+        for i in xrange(len(block_classes)):
+            if block_classes[i] == 1:
+                article_blocks.append(self._text_blocks[i])
+
+        return '\n'.join(article_blocks)
+
     TAGS_TO_IGNORE = set('style,script,option,object,embed,applet,link,noscript'.split(','))
     TAGS_INLINE = set('strike,u,b,i,em,strong,span,sup,code,tt,sub,var,abbr,acronym,font'.split(','))
 

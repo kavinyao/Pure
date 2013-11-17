@@ -6,7 +6,7 @@ from readability import L3SDocumentLoader, DensitometricFeatureExtractor
 class MatrixScaler(object):
     """Scale features to [-1, 1] or [0, 1], as recommended by [Lin 2003]."""
 
-    def scale(self, matrix):
+    def scale_train(self, matrix):
         """Scale and remember scaling factors.
         @param matrix 2-D numpy array
         """
@@ -27,6 +27,46 @@ class MatrixScaler(object):
                 self.scaling_factors.append((non_negative, _max))
 
         return matrix
+
+    def scale(self, matrix):
+        for c in xrange(matrix.shape[1]):
+            col = matrix[:,c]
+            config = self.scaling_factors[c]
+            non_negative = config[0]
+            if non_negative:
+                _min, _max = config[1:]
+                _range = _max-_min
+                if _range > 0:
+                    matrix[:,c] = (col-_min)/_range
+            else:
+                _max = self.scaling_factors[1]
+                if _max > 0:
+                    matrix[:,c] = col / _max
+
+        return matrix
+
+
+def train_model(documents):
+    features = []
+    labels = []
+    for doc in documents:
+        doc_features, doc_labels = doc.get_training_example(DensitometricFeatureExtractor)
+        features.extend(doc_features)
+        labels.extend(doc_labels)
+
+    print '#Examples:', len(labels)
+    print '#Positive:', labels.count(1)
+
+    data = np.array(features)
+    target = np.array(labels)
+
+    scaler = MatrixScaler()
+    scaled_data = scaler.scale_train(data)
+
+    clf = svm.SVC()
+    clf.fit(scaled_data, labels)
+
+    return clf, scaler
 
 
 if __name__ == '__main__':
@@ -51,7 +91,7 @@ if __name__ == '__main__':
     target = np.array(labels)
 
     scaler = MatrixScaler()
-    scaled_data = scaler.scale(data)
+    scaled_data = scaler.scale_train(data)
 
     clf = svm.SVC()
     scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring='f1')
