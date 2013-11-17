@@ -61,14 +61,17 @@ class L3SDocument(object):
         """
         print 'processing', self.original
 
+        # collect text blocks
         self._text_cache = []
-        self._link_text_cache = []
-        self._feature_matrix = []
-        self._labels = []
-        self._feature_extractor = feature_extractor
+        self._text_blocks = []
         self._traverse(self.html_doc.body)
 
-        return self._feature_matrix, self._labels
+        # generate features
+        feature_matrix = feature_extractor.extract(self._text_blocks)
+        # TODO: a text block must be longer than 3 words to be eligible for testing as main content
+        labels = [1 if block.count(' ') > 2 and block in self.main_content else 0 for block in self._text_blocks]
+
+        return feature_matrix, labels
 
     TAGS_TO_IGNORE = set('style,script,option,object,embed,applet,link,noscript'.split(','))
     TAGS_INLINE = set('strike,u,b,i,em,strong,span,sup,code,tt,sub,var,abbr,acronym,font'.split(','))
@@ -79,65 +82,85 @@ class L3SDocument(object):
 
         flush = elem.tag not in L3SDocument.TAGS_INLINE
         if flush:
-            self._generate_feature()
+            self._generate_block()
 
         if elem.text:
-            self._text_cache.append(elem.text)
-            
             if elem.tag == 'a':
-                self._link_text_cache.append(elem.text)
+                self._text_cache.append(AnchorUtil.mark_as_anchor(elem.text))
+            else:
+                self._text_cache.append(elem.text)
 
         for child in elem.getchildren():
             self._traverse(child, depth+1)
 
         if flush:
-            self._generate_feature()
+            self._generate_block()
 
         if elem.tail:
             self._text_cache.append(elem.tail)
 
-    def _generate_feature(self):
+    def _generate_block(self):
         if not self._text_cache:
             return
 
         text_block = self.normalize_html_text(' '.join(self._text_cache))
-        link_block = self.normalize_html_text(' '.join(self._link_text_cache))
         if text_block == '':
             return
 
-        self._feature_matrix.append(self._feature_extractor.extract(text_block, link_block))
-        label = 1 if text_block in self.main_content else 0
-        if text_block.count(' ') < 2:
-            # too short to be confident
-            label = 0
-        self._labels.append(label)
-
+        self._text_blocks.append(text_block)
         #print '%d. |%s|' % (self._labels[-1], text_block)
 
         self._text_cache = []
-        self._link_text_cache = []
 
     def normalize_html_text(self, text):
         return L3SDocument.BLANK_REGEX.sub(' ', text).strip()
+
+
+class AnchorUtil(object):
+    BEGIN = '<<LINK<<'
+    END = '>>LINK>>'
+    extract_re = re.compile(BEGIN+'(.*?)'+END)
+    ignore_re = re.compile(BEGIN+'|'+END)
+
+    @staticmethod
+    def mark_as_anchor(text):
+        return AnchorUtil.BEGIN + text.strip() + AnchorUtil.END
+
+    @staticmethod
+    def extract_anchor_text(text):
+        return ' '.join(AnchorUtil.extract_re.findall(text))
+
+    @staticmethod
+    def remove_markers(text):
+        return AnchorUtil.ignore_re.sub('', text)
 
 
 class DensitometricFeatureExtractor(object):
     LINE_DELIMITERS = '.,?!'
 
     @staticmethod
-    def extract(text_block, link_block):
-        """Extract number of words, text density and link density."""
-        # crude word and lines count
-        words = text_block.count(' ')
-        lines = DensitometricFeatureExtractor.count_lines(text_block)
+    def extract(text_blocks):
+        """Extract number of words, text density and link density
+        of the previous, current and next text blocks."""
+        features = []
+        for text_block in text_blocks:
+            # remove link markers
+            block = AnchorUtil.remove_markers(text_block)
+            # crude word and lines count
+            words = block.count(' ')
+            lines = DensitometricFeatureExtractor.count_lines(block)
 
-        link_words = link_block.count(' ')
+            # extract link text
+            link_text = AnchorUtil.extract_anchor_text(text_block)
+            link_words = link_text.count(' ')
 
-        # prevent division by zero
-        if words == 0: words = 1
-        if lines == 0: lines = 1
+            # prevent division by zero
+            if words == 0: words = 1
+            if lines == 0: lines = 1
 
-        return [words, 1.0*words/lines, 1.0*link_words/words]
+            features.append([words, 1.0*words/lines, 1.0*link_words/words])
+
+        return features
 
     @staticmethod
     def count_lines(text):

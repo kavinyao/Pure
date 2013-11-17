@@ -19,10 +19,11 @@ if __name__ == '__main__':
         labels.extend(doc_labels)
 
     print '#Examples:', len(labels)
+    print '#Positive:', labels.count(1)
 
     data = np.array(features)
     target = np.array(labels)
 
     clf = svm.SVC()
-    scores = cross_validation.cross_val_score(clf, data, target, cv=10)
-    print 'Accuracy:%0.2f (+/- %0.2f)' % (scores.mean(), scores.std()*2)
+    scores = cross_validation.cross_val_score(clf, data, target, cv=10, scoring='f1')
+    print 'F1:%0.2f (+/- %0.2f)' % (scores.mean(), scores.std()*2)
