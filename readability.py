@@ -160,6 +160,14 @@ class DensitometricFeatureExtractor(object):
 
             features.append([words, 1.0*words/lines, 1.0*link_words/words])
 
+        # add previous and next features
+        n_features = len(features)
+        for i in xrange(n_features):
+            previous = [0., 0., 0.] if i == 0 else features[i-1][:3]
+            next = [0., 0., 0.] if i+1 == n_features else features[i+1][:3]
+            features[i].extend(previous)
+            features[i].extend(next)
+
         return features
 
     @staticmethod
