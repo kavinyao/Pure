@@ -77,6 +77,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--task', help='task to run [cv|dump]')
     parser.add_argument('-s', '--scoring', default=None, help='scoring method of cross validation')
     parser.add_argument('-u', '--unique', action='store_true', default=False, help='use unique feature-label combinations as examples')
+    parser.add_argument('-o', '--output', default='rd_train', help='specify output of dump')
 
     args = parser.parse_args()
     loader = L3SDocumentLoader(args.dataset_dir)
@@ -113,11 +114,12 @@ if __name__ == '__main__':
         scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring=args.scoring)
         print '%s: %0.2f (+/- %0.2f)' % ((args.scoring or 'Precision').capitalize(), scores.mean(), scores.std()*2)
     elif args.task == 'dump':
-        for i in xrange(len(labels)):
-            label, feature = labels[i], features[i]
-            line = [str(label)]
-            for j, f in enumerate(feature, 1):
-                line.append('%d:%f' % (j, f))
-            print ','.join(line)
+        with open(args.output, 'w') as output:
+            for i in xrange(len(labels)):
+                label, feature = labels[i], features[i]
+                line = [str(label)]
+                for j, f in enumerate(feature, 1):
+                    line.append('%d:%f' % (j, f))
+                output.write(' '.join(line)+'\n')
     else:
         print 'No task specified.'
