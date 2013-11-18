@@ -62,6 +62,11 @@ class L3SDocument(object):
         for span in spans:
             if span.text:
                 text_pieces.append(span.text.strip())
+            else:
+                children = span.getchildren()
+                if len(children) == 1 and children[0].tag == 'span':
+                    if 'x-text-density' in children[0].attrib and children[0].text:
+                        text_pieces.append(children[0].text)
 
         return self.normalize_html_text(' '.join(text_pieces))
 
@@ -89,7 +94,11 @@ class L3SDocument(object):
             if block_classes[i] == 1:
                 article_blocks.append(self._text_blocks[i])
 
-        return '\n'.join(article_blocks)
+        if not article_blocks:
+            print '[WARN]: nothing extracted from %s, returning all content' % self
+            return self.normalize_html_text(self.html_doc.body.text_content())
+        else:
+            return '\n'.join(article_blocks)
 
     def get_main_content(self):
         return self.main_content
