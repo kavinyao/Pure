@@ -75,14 +75,15 @@ def train_model(documents):
 
 
 if __name__ == '__main__':
-    tasks = ['cv', 'dump', 'evaluate']
+    tasks = ['cv', 'dump', 'evaluate', 'plot']
+
     parser = ArgumentParser(description='Run content extraction jobs.')
     parser.add_argument('dataset_dir', metavar='<Dataset Directory>')
     parser.add_argument('-t', '--task', help='task to run [%s]' % ('|'.join(tasks)))
     parser.add_argument('-l', '--limit', type=int, default=0, help='maximum number of documents to use, default to all')
     parser.add_argument('-s', '--scoring', default=None, help='scoring method of cross validation')
     parser.add_argument('-u', '--unique', action='store_true', default=False, help='use unique feature-label combinations as examples')
-    parser.add_argument('-o', '--output', default='rd_train', help='specify output of dump')
+    parser.add_argument('-o', '--output', default='output.data', help='specify output file of various tasks')
     parser.add_argument('-r', '--ratio', default=0.7, type=float, help='when testing, ratio of examples as training data')
 
     args = parser.parse_args()
@@ -125,7 +126,8 @@ if __name__ == '__main__':
         clf = svm.SVC()
         scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring=args.scoring)
         print '%s: %0.2f (+/- %0.2f)' % ((args.scoring or 'Precision').capitalize(), scores.mean(), scores.std()*2)
-    elif args.task == 'evaluate':
+    elif args.task == 'evaluate' or args.task == 'plot':
+        plot = args.task == 'plot'
         data = np.array(features)
         target = np.array(labels)
 
@@ -135,9 +137,10 @@ if __name__ == '__main__':
         clf = svm.SVC()
         clf.fit(data, target)
 
-        evaluator = L3SEvaluator(documents[int(len(documents)*args.ratio):], DensitometricFeatureExtractor, clf, scaler)
+        test_documents = documents if plot else documents[int(len(documents)*args.ratio):]
+        evaluator = L3SEvaluator(test_documents, DensitometricFeatureExtractor, clf, scaler)
         evaluator.evaluate()
-        evaluator.report()
+        evaluator.report(args.output if plot else None)
     elif args.task == 'dump':
         with open(args.output, 'w') as output:
             for i in xrange(len(labels)):

@@ -185,11 +185,19 @@ class L3SEvaluator(object):
     def average(numbers):
         return 1.0 * sum(numbers) / len(numbers)
 
-    def report(self):
+    def report(self, out_file=None):
+        """
+        @param out_file if set, will save data to the specified file
+        """
         f_measures = [2/(1/p+1/r) for p,r in zip(self.precisions, self.recalls)]
         print 'Average precision', L3SEvaluator.average(self.precisions)
         print 'Average recall', L3SEvaluator.average(self.recalls)
         print 'Average F-measure', L3SEvaluator.average(f_measures)
+
+        if out_file:
+            with open(out_file, 'w') as pd:
+                for f in f_measures:
+                    pd.write('%.4f\n' % f)
 
 
 class AnchorUtil(object):
