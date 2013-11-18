@@ -1,7 +1,8 @@
 import os
 import re
-import lxml.html
 import random
+import lxml.html
+from lxml.html.clean import Cleaner
 
 class L3SDocumentLoader(object):
     """Load L3S documents from specified directory."""
@@ -26,6 +27,8 @@ class L3SDocumentLoader(object):
         annotated = os.path.join(self.annotated_dir, file_name)
         return L3SDocument(original, annotated)
 
+
+basic_cleaner = Cleaner(forms=False, style=False, meta=False, page_structure=False, remove_unknown_tags=False, safe_attrs_only=False)
 
 class L3SDocument(object):
     """A document from L3S dataset."""
@@ -200,6 +203,8 @@ class HTMLLoader(object):
     @staticmethod
     def from_file(filename):
         with open(filename) as f:
-            html = f.read().decode('utf-8')
+            html = f.read().decode('utf-8', 'ignore')
+            # lxml doesn't like xml encoding declaration in unicode html
             html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html)
+            html = basic_cleaner.clean_html(html)
             return lxml.html.document_fromstring(html)
