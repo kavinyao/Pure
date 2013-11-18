@@ -2,6 +2,7 @@ import os
 import re
 import random
 import lxml.html
+import numpy as np
 from lxml.html.clean import Cleaner
 
 class L3SDocumentLoader(object):
@@ -40,8 +41,14 @@ class L3SDocument(object):
 
         self.html_doc = HTMLLoader.from_file(original)
         self.main_content = self._get_main_content(annotated)
-        print 'processing', self.original
+        print 'loading', self
         #print self.main_content
+
+    def __repr__(self):
+        return 'L3S Document <%s>' % (os.path.basename(self.original))
+
+    def __str__(self):
+        return repr(self)
 
     def _get_main_content(self, annotated):
         """Extract annotated main content.
@@ -62,7 +69,7 @@ class L3SDocument(object):
         """Get text block training example from this document.
         @return (feature_matrix, label_vector)
         """
-        print 'processing', self.original
+        print 'generating traing examples', self
 
         # collect text blocks
         self._text_cache = []
@@ -83,6 +90,9 @@ class L3SDocument(object):
                 article_blocks.append(self._text_blocks[i])
 
         return '\n'.join(article_blocks)
+
+    def get_main_content(self):
+        return self.main_content
 
     TAGS_TO_IGNORE = set('style,script,option,object,embed,applet,link,noscript'.split(','))
     TAGS_INLINE = set('strike,u,b,i,em,strong,span,sup,code,tt,sub,var,abbr,acronym,font'.split(','))
@@ -125,6 +135,55 @@ class L3SDocument(object):
 
     def normalize_html_text(self, text):
         return L3SDocument.BLANK_REGEX.sub(' ', text).strip()
+
+
+class L3SEvaluator(object):
+    """Evaluate content extraction based against trained model."""
+
+    def __init__(self, docs, fe, model, scaler):
+        """
+        @param docs list<L3SDocument> to test
+        @param fe feature extractor to use
+        @param model classifier model trained
+        @param scaler MatrixScaler to scale feature data
+        """
+        self.documents = docs
+        self.feature_extractor = fe
+        self.model = model
+        self.scaler = scaler
+
+    def evaluate(self):
+        self.precisions = []
+        self.recalls = []
+
+        for doc in self.documents:
+            features, _ = doc.get_training_example(self.feature_extractor)
+            features = self.scaler.scale(np.array(features))
+            classes = self.model.predict(features)
+
+            extracted_content = doc.extract_article(classes)
+            main_content = doc.get_main_content()
+
+            # do token-level comparison
+            e_words = set(extracted_content.split())
+            m_words = set(main_content.split())
+            common_words = e_words.intersection(m_words)
+            if not common_words:
+                common_words = set(['CANNOT_BELIEVE_THIS'])
+                print 'WARN: no word predicted accurately for', doc
+
+            self.precisions.append(1.0*len(common_words)/len(e_words))
+            self.recalls.append(1.0*len(common_words)/len(m_words))
+
+    @staticmethod
+    def average(numbers):
+        return 1.0 * sum(numbers) / len(numbers)
+
+    def report(self):
+        f_measures = [2/(1/p+1/r) for p,r in zip(self.precisions, self.recalls)]
+        print 'Average precision', L3SEvaluator.average(self.precisions)
+        print 'Average recall', L3SEvaluator.average(self.recalls)
+        print 'Average F-measure', L3SEvaluator.average(f_measures)
 
 
 class AnchorUtil(object):
