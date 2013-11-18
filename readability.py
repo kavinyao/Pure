@@ -47,9 +47,6 @@ class L3SDocument(object):
     def __repr__(self):
         return 'L3S Document <%s>' % (os.path.basename(self.original))
 
-    def __str__(self):
-        return repr(self)
-
     def _get_main_content(self, annotated):
         """Extract annotated main content.
         Note: currently cannot find a non-trivial way to handle
