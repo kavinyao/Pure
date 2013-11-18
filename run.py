@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+from argparse import ArgumentParser
 from sklearn import svm, cross_validation
 from readability import L3SDocumentLoader, DensitometricFeatureExtractor
 
@@ -70,29 +71,53 @@ def train_model(documents):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print 'Usage: python %s <L3S base path> [limit]' % sys.argv[0]
-        sys.exit(1)
+    parser = ArgumentParser(description='Run content extraction jobs.')
+    parser.add_argument('dataset_dir', metavar='<Dataset Directory>')
+    parser.add_argument('-l', '--limit', type=int, default=0, help='maximum number of documents to use')
+    parser.add_argument('-t', '--task', help='task to run [cv|dump]')
+    parser.add_argument('-s', '--scoring', default=None, help='scoring method of cross validation')
+    parser.add_argument('-u', '--unique', action='store_true', default=False, help='use unique feature-label combinations as examples')
 
-    loader = L3SDocumentLoader(sys.argv[1])
-    documents = loader.get_documents(0 if len(sys.argv) < 3 else int(sys.argv[2]))
+    args = parser.parse_args()
+    loader = L3SDocumentLoader(args.dataset_dir)
+    documents = loader.get_documents(args.limit)
 
-    features = []
-    labels = []
+    raw_features = []
+    raw_labels = []
     for doc in documents:
         doc_features, doc_labels = doc.get_training_example(DensitometricFeatureExtractor)
-        features.extend(doc_features)
-        labels.extend(doc_labels)
+        raw_features.extend(doc_features)
+        raw_labels.extend(doc_labels)
 
+    if args.unique:
+        unique_examples = set(t for t in zip(raw_labels, (tuple(fs) for fs in raw_features)))
+        labels, features = [], []
+        for t in unique_examples:
+            labels.append(t[0])
+            features.append(t[1])
+    else:
+        labels, features = raw_labels, raw_features
+
+    assert len(raw_features[0]) == len(features[0])
     print '#Examples:', len(labels)
     print '#Positive:', labels.count(1)
 
-    data = np.array(features)
-    target = np.array(labels)
+    if args.task == 'cv':
+        data = np.array(features)
+        target = np.array(labels)
 
-    scaler = MatrixScaler()
-    scaled_data = scaler.scale_train(data)
+        scaler = MatrixScaler()
+        scaled_data = scaler.scale_train(data)
 
-    clf = svm.SVC()
-    scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring='f1')
-    print 'F1:%0.2f (+/- %0.2f)' % (scores.mean(), scores.std()*2)
+        clf = svm.SVC()
+        scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring=args.scoring)
+        print '%s: %0.2f (+/- %0.2f)' % ((args.scoring or 'Precision').capitalize(), scores.mean(), scores.std()*2)
+    elif args.task == 'dump':
+        for i in xrange(len(labels)):
+            label, feature = labels[i], features[i]
+            line = [str(label)]
+            for j, f in enumerate(feature, 1):
+                line.append('%d:%f' % (j, f))
+            print ','.join(line)
+    else:
+        print 'No task specified.'
