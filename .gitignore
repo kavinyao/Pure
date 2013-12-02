@@ -1,3 +1,6 @@
 *.pyc
 .*.sw[p-z]
 .DS_Store
+
+output.data
+plot_output.m
