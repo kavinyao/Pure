@@ -101,7 +101,7 @@ class L3SDocument(object):
         return self.main_content
 
     TAGS_TO_IGNORE = set('style,script,option,object,embed,applet,link,noscript'.split(','))
-    TAGS_INLINE = set('a,strike,u,b,i,em,strong,span,sup,code,tt,sub,var,abbr,acronym,font'.split(','))
+    TAGS_INLINE = set('a,b,big,i,small,tt,abbr,acronym,cite,code,dfn,em,kbd,strong,samp,var,bdo,br,img,map,object,q,span,sub,sup,button,input,label,select,textarea'.split(','))
 
     def _traverse(self, elem, depth=0):
         if elem.tag in L3SDocument.TAGS_TO_IGNORE:
