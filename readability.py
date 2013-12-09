@@ -29,14 +29,15 @@ class L3SDocumentLoader(object):
         return L3SDocument(original, annotated)
 
 
-basic_cleaner = Cleaner(forms=False, style=False, meta=False, page_structure=False, remove_unknown_tags=False, safe_attrs_only=False)
-
-class L3SDocument(object):
-    """A document from L3S dataset."""
-    BLOCK_WRAPPER_REGEX = re.compile(r'<(table|dl|div|ol|ul|p|article|section)', re.I)
+class Document(object):
+    """A generic HTML document for extraction."""
     BLANK_REGEX = re.compile(r'\s+')
 
     def __init__(self, original, annotated):
+        """
+        @param original path to original HTML
+        @param annotated path to gold corresponding gold standard
+        """
         self.original = original
 
         self.html_doc = HTMLLoader.from_file(original)
@@ -44,28 +45,11 @@ class L3SDocument(object):
         print 'loading', self
         #print self.main_content
 
-    def __repr__(self):
-        return 'L3S Document <%s>' % (os.path.basename(self.original))
-
     def _get_main_content(self, annotated):
-        """Extract annotated main content.
-        Note: currently cannot find a non-trivial way to handle
-        the manually inserted tags, so just combine them.
-        """
-        doc = HTMLLoader.from_file(annotated)
-        spans = doc.xpath(".//span[@class='x-nc-sel2']")
-        text_pieces = []
+        raise NotImplementedError
 
-        for span in spans:
-            if span.text:
-                text_pieces.append(span.text.strip())
-            else:
-                children = span.getchildren()
-                if len(children) == 1 and children[0].tag == 'span':
-                    if 'x-text-density' in children[0].attrib and children[0].text:
-                        text_pieces.append(children[0].text)
-
-        return self.normalize_html_text(' '.join(text_pieces))
+    def __repr__(self):
+        return 'Document <%s>' % (os.path.basename(self.original))
 
     def get_training_example(self, feature_extractor):
         """Get text block training example from this document.
@@ -143,12 +127,39 @@ class L3SDocument(object):
         return L3SDocument.BLANK_REGEX.sub(' ', text).strip()
 
 
-class L3SEvaluator(object):
+class L3SDocument(Document):
+    """A document from L3S dataset."""
+
+    def __repr__(self):
+        return 'L3S Document <%s>' % (os.path.basename(self.original))
+
+    def _get_main_content(self, annotated):
+        """Extract annotated main content.
+        Note: currently cannot find a non-trivial way to handle
+        the manually inserted tags, so just combine them.
+        """
+        doc = HTMLLoader.from_file(annotated)
+        spans = doc.xpath(".//span[@class='x-nc-sel2']")
+        text_pieces = []
+
+        for span in spans:
+            if span.text:
+                text_pieces.append(span.text.strip())
+            else:
+                children = span.getchildren()
+                if len(children) == 1 and children[0].tag == 'span':
+                    if 'x-text-density' in children[0].attrib and children[0].text:
+                        text_pieces.append(children[0].text)
+
+        return self.normalize_html_text(' '.join(text_pieces))
+
+
+class Evaluator(object):
     """Evaluate content extraction based against trained model."""
 
     def __init__(self, docs, fe, model, scaler):
         """
-        @param docs list<L3SDocument> to test
+        @param docs list<Document> to test
         @param fe feature extractor to use
         @param model classifier model trained
         @param scaler MatrixScaler to scale feature data
@@ -190,9 +201,9 @@ class L3SEvaluator(object):
         @param out_file if set, will save data to the specified file
         """
         f_measures = [2/(1/p+1/r) for p,r in zip(self.precisions, self.recalls)]
-        print 'Average precision', L3SEvaluator.average(self.precisions)
-        print 'Average recall', L3SEvaluator.average(self.recalls)
-        print 'Average F-measure', L3SEvaluator.average(f_measures)
+        print 'Average precision', Evaluator.average(self.precisions)
+        print 'Average recall', Evaluator.average(self.recalls)
+        print 'Average F-measure', Evaluator.average(f_measures)
 
         if out_file:
             with open(out_file, 'w') as pd:
@@ -269,6 +280,8 @@ class DensitometricFeatureExtractor(object):
     def count_lines(text):
         return len(text) / 80
 
+
+basic_cleaner = Cleaner(forms=False, style=False, meta=False, page_structure=False, remove_unknown_tags=False, safe_attrs_only=False)
 
 class HTMLLoader(object):
     XML_ENCODING_DECLARATION = re.compile(r'^\s*<\?xml[^>]*?>', re.I);

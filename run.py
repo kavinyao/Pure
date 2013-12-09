@@ -3,7 +3,7 @@ import random
 import numpy as np
 from argparse import ArgumentParser
 from sklearn import svm, cross_validation
-from readability import L3SDocumentLoader, DensitometricFeatureExtractor, L3SEvaluator
+from readability import L3SDocumentLoader, DensitometricFeatureExtractor, Evaluator
 
 class MatrixScaler(object):
     """Scale features to [-1, 1] or [0, 1], as recommended by [Lin 2003]."""
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         clf.fit(data, target)
 
         test_documents = documents if plot else documents[int(len(documents)*args.ratio):]
-        evaluator = L3SEvaluator(test_documents, DensitometricFeatureExtractor, clf, scaler)
+        evaluator = Evaluator(test_documents, DensitometricFeatureExtractor, clf, scaler)
         evaluator.evaluate()
         evaluator.report(args.output if plot else None)
     elif args.task == 'dump':
