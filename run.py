@@ -3,7 +3,7 @@ import random
 import numpy as np
 from argparse import ArgumentParser
 from sklearn import svm, cross_validation
-from readability import L3SDocumentLoader, DensitometricFeatureExtractor, Evaluator
+from readability import L3SDocumentLoader, DragnetDocumentLoader, DensitometricFeatureExtractor, Evaluator
 
 class MatrixScaler(object):
     """Scale features to [-1, 1] or [0, 1], as recommended by [Lin 2003]."""
@@ -80,6 +80,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='Run content extraction jobs.')
     parser.add_argument('dataset_dir', metavar='<Dataset Directory>')
     parser.add_argument('-t', '--task', help='task to run [%s]' % ('|'.join(tasks)))
+    parser.add_argument('-d', '--dataset', default='L3S', help='set which dataset to use (L3S or Draget)')
     parser.add_argument('-l', '--limit', type=int, default=0, help='maximum number of documents to use, default to all')
     parser.add_argument('-s', '--scoring', default=None, help='scoring method of cross validation')
     parser.add_argument('-u', '--unique', action='store_true', default=False, help='use unique feature-label combinations as examples')
@@ -92,7 +93,7 @@ if __name__ == '__main__':
         print 'No task specified.'
         sys.exit(1)
 
-    loader = L3SDocumentLoader(args.dataset_dir)
+    loader = L3SDocumentLoader(args.dataset_dir) if args.dataset == 'L3S' else DragnetDocumentLoader(args.dataset_dir)
     documents = loader.get_documents(args.limit)
     training_documents = documents if args.task != 'evaluate' else documents[:int(len(documents)*args.ratio)]
 

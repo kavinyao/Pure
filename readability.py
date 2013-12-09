@@ -5,15 +5,15 @@ import lxml.html
 import numpy as np
 from lxml.html.clean import Cleaner
 
-class L3SDocumentLoader(object):
-    """Load L3S documents from specified directory."""
+class DocumentLoader(object):
+    """Load documents from specified directory."""
 
-    def __init__(self, base_dir):
+    def __init__(self, base_dir, original_subdir, annotated_subdir):
         """
-        @param base_dir the root directory of L3S dataset
+        @param base_dir the root directory of dataset
         """
-        self.original_dir = os.path.join(base_dir, 'original')
-        self.annotated_dir = os.path.join(base_dir, 'annotated')
+        self.original_dir = os.path.join(base_dir, original_subdir)
+        self.annotated_dir = os.path.join(base_dir, annotated_subdir)
 
     def get_documents(self, limit=0):
         files = os.listdir(self.original_dir)
@@ -26,7 +26,27 @@ class L3SDocumentLoader(object):
     def generate_document(self, file_name):
         original = os.path.join(self.original_dir, file_name)
         annotated = os.path.join(self.annotated_dir, file_name)
+
+        return self._new_document(original, annotated)
+
+    def _new_document(self, original, annotated):
+        raise NotImplementedError
+
+
+class L3SDocumentLoader(DocumentLoader):
+    def __init__(self, base_dir):
+        super(L3SDocumentLoader, self).__init__(base_dir, 'original', 'annotated')
+
+    def _new_document(self, original, annotated):
         return L3SDocument(original, annotated)
+
+
+class DragnetDocumentLoader(DocumentLoader):
+    def __init__(self, base_dir):
+        super(DragnetDocumentLoader, self).__init__(base_dir, 'HTML', 'Corrected')
+
+    def _new_document(self, original, annotated):
+        return DragnetDocument(original, '%s.corrected.txt' % annotated)
 
 
 class Document(object):
@@ -40,9 +60,9 @@ class Document(object):
         """
         self.original = original
 
+        print 'loading', self
         self.html_doc = HTMLLoader.from_file(original)
         self.main_content = self._get_main_content(annotated)
-        print 'loading', self
         #print self.main_content
 
     def _get_main_content(self, annotated):
@@ -152,6 +172,19 @@ class L3SDocument(Document):
                         text_pieces.append(children[0].text)
 
         return self.normalize_html_text(' '.join(text_pieces))
+
+
+class DragnetDocument(Document):
+    """A document from Dragnet 2012 dataset."""
+
+    def __repr__(self):
+        return 'Dragnet Document <%s>' % (os.path.basename(self.original))
+
+    def _get_main_content(self, annotated):
+        """Extract annotated main content.
+        """
+        with open(annotated) as f:
+            return self.normalize_html_text(f.read().decode('utf-8', 'ignore'))
 
 
 class Evaluator(object):
