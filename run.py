@@ -31,11 +31,7 @@ if __name__ == '__main__':
     documents = loader.get_documents(args.limit)
     training_documents = documents if args.task != 'evaluate' else documents[:int(len(documents)*args.ratio)]
 
-    model = ContentExtractionModel([DensitometricFeatureExtractor])
-
-    if args.unique:
-        # TODO
-        raise NotImplementedError
+    model = ContentExtractionModel([DensitometricFeatureExtractor], unique=args.unique)
 
     if args.task == 'cv':
         target, data = model.extract_features(training_documents)

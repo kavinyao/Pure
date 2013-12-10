@@ -404,13 +404,28 @@ class MatrixScaler(object):
         return matrix
 
 
+def unique_rows(a):
+    """http://stackoverflow.com/a/16971324/1240620
+    @return 2-D array of unique rows of matrix.
+    """
+    b = a[np.lexsort(a.T)]
+    return b[np.concatenate(([True], np.any(b[1:] != b[:-1], axis=1)))]
+
+
 class ContentExtractionModel(object):
-    def __init__(self, feature_extractors):
+    def __init__(self, feature_extractors, unique):
         self.feature_extractors = feature_extractors
         self.scaler = MatrixScaler()
+        self.unique = unique # whether use unique training examples only
 
-    def extract_features(self, documents, unique=False, verbose=True):
-        """@return numpy array of labels and features."""
+    def extract_features(self, documents):
+        """
+        Note: if len(documents) == 1, it is assumed feature extraction is for prediction,
+              under this scenario, unique mode will not be triggered.
+        @return numpy array of labels and features.
+        """
+        batch_mode = len(documents) > 1
+
         block_lists = [doc.get_blocks() for doc in documents]
         n_blocks = sum(len(blist) for blist in block_lists)
         n_features = sum(fe.n_features for fe in self.feature_extractors)
@@ -430,7 +445,13 @@ class ContentExtractionModel(object):
 
             row = end_row
 
-        if verbose:
+        if batch_mode and self.unique:
+            combined = np.hstack((labels.reshape((n_blocks, 1)), features))
+            unique_examples = unique_rows(combined)
+            labels = unique_examples[:, 0]
+            features = unique_examples[:, 1:]
+
+        if batch_mode:
             # gather label statistics
             positive_count = np.sum(labels == POSITIVE_LABEL)
             print '#Examples:', len(labels)
@@ -438,8 +459,8 @@ class ContentExtractionModel(object):
 
         return labels, features
 
-    def train(self, documents, unique=False):
-        labels, features = self.extract_features(documents, unique)
+    def train(self, documents):
+        labels, features = self.extract_features(documents)
         scaled_features = self.scaler.scale_data(features)
 
         self.svm = svm.SVC()
@@ -448,5 +469,5 @@ class ContentExtractionModel(object):
         print '>>> Training is over'
 
     def predict(self, document):
-        _, features = self.extract_features([document], verbose=False)
+        _, features = self.extract_features([document])
         return self.svm.predict(self.scaler.scale(features))
