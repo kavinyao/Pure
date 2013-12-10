@@ -54,15 +54,19 @@ class DragnetDocumentLoader(DocumentLoader):
 
 
 class Block(object):
-    def __init__(self, label, text, tokens):
+    def __init__(self, doc, label, text, tokens):
         """
         @param label POSITIVE_LABEL or NEGATIVE_LABEL
         @param text text with possibly inserted anchor markers
         @param tokens words extracted from id/class attribute
         """
+        self.doc = doc
         self.label = label
         self.text = text
         self.tokens = tokens
+
+    def __repr__(self):
+        return 'TextBlock[%s..] from %s' % (self.text[:42].encode('utf-8'), self.doc)
 
 
 class Document(object):
@@ -158,7 +162,7 @@ class Document(object):
 
         # TODO: a text block must be longer than 3 words to be eligible for testing as main content
         label = POSITIVE_LABEL if text.count(' ') > 2 and AnchorUtil.remove_markers(text) in self.main_content else NEGATIVE_LABEL
-        self._text_blocks.append(Block(label, text, None))
+        self._text_blocks.append(Block(self, label, text, None))
 
         self._text_cache = []
 
@@ -295,6 +299,9 @@ class AnchorUtil(object):
 
 class DensitometricFeatureExtractor(object):
     LINE_DELIMITERS = '.,?!'
+    NUM_WORDS_CAP = 500
+    NUM_WORDS_PER_SENTENCE_CAP = 50
+
     n_features = 7
 
     @staticmethod
@@ -319,8 +326,22 @@ class DensitometricFeatureExtractor(object):
             if lines == 0: lines = 1
             if sentences == 0: sentences = 1
 
+            num_words = 1.0*words
+            num_words_per_sentence = 1.0*words/sentences
+            num_words_per_line = 1.0*words/lines
+            link_density = 1.0*link_words/words
+
+            # regularization to avoid influence of outliers
+            if num_words > DensitometricFeatureExtractor.NUM_WORDS_CAP:
+                print 'Warning: %s has more than %d words (%d), capping...' % (text_block, DensitometricFeatureExtractor.NUM_WORDS_CAP, num_words)
+                num_words = DensitometricFeatureExtractor.NUM_WORDS_CAP
+
+            if num_words_per_sentence > DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP:
+                print 'Warning: %s has more than %d words/sentence (%d), capping...' % (text_block, DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP, num_words_per_sentence)
+                num_words_per_sentence = DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP
+
             # number of words, average sentence length, text density, link density
-            features.append([1.0*words, 1.0*words/sentences, 1.0*words/lines, 1.0*link_words/words])
+            features.append([num_words, num_words_per_sentence, num_words_per_line, link_density])
 
         # add number of words quotient, avg. senence length quotient, text density quotient w.r.t. previous block
         n_features = len(features)
