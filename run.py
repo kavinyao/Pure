@@ -40,11 +40,6 @@ if __name__ == '__main__':
     if args.task == 'cv':
         target, data = model.extract_features(training_documents)
 
-        # gather label statistics
-        positive_count = np.sum(target == POSITIVE_LABEL)
-        print '#Examples:', len(target)
-        print '#Positive:', positive_count
-
         scaler = MatrixScaler()
         scaled_data = scaler.scale_data(data)
 

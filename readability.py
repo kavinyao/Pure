@@ -430,6 +430,11 @@ class ContentExtractionModel(object):
 
             row = end_row
 
+        # gather label statistics
+        positive_count = np.sum(labels == POSITIVE_LABEL)
+        print '#Examples:', len(labels)
+        print '#Positive:', positive_count
+
         return labels, features
 
     def train(self, documents, unique=False):
