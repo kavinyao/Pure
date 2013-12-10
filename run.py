@@ -8,29 +8,6 @@ from readability import DensitometricFeatureExtractor
 from readability import ContentExtractionModel, Evaluator, MatrixScaler
 from readability import POSITIVE_LABEL, NEGATIVE_LABEL
 
-def train_model(documents):
-    features = []
-    labels = []
-    for doc in documents:
-        doc_features, doc_labels = doc.get_training_example(DensitometricFeatureExtractor)
-        features.extend(doc_features)
-        labels.extend(doc_labels)
-
-    print '#Examples:', len(labels)
-    print '#Positive:', labels.count(1)
-
-    data = np.array(features)
-    target = np.array(labels)
-
-    scaler = MatrixScaler()
-    scaled_data = scaler.scale_train(data)
-
-    clf = svm.SVC()
-    clf.fit(scaled_data, labels)
-
-    return clf, scaler
-
-
 if __name__ == '__main__':
     tasks = ['cv', 'dump', 'evaluate', 'plot']
 
