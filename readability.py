@@ -5,6 +5,8 @@ import random
 import lxml.html
 import numpy as np
 from sklearn import svm
+from collections import Counter
+from util import extract_css_tokens
 from lxml.html.clean import Cleaner
 
 POSITIVE_LABEL = 1
@@ -59,12 +61,12 @@ class Block(object):
         """
         @param label POSITIVE_LABEL or NEGATIVE_LABEL
         @param text text with possibly inserted anchor markers
-        @param tokens words extracted from id/class attribute
+        @param tokens Counter of tokens from id/class attribute
         """
         self.doc = doc
         self.label = label
         self.text = text
-        self.tokens = tokens
+        self.css_tokens = tokens
 
     def __repr__(self):
         return 'TextBlock[%s..] from %s' % (self.text[:42].encode('utf-8'), self.doc)
@@ -88,6 +90,7 @@ class Document(object):
 
         # for collecting text blocks
         self._text_cache = []
+        self._css_token_cache = []
         self._text_blocks = []
         self._text_blocks_generated = False
 
@@ -133,6 +136,10 @@ class Document(object):
         if elem.tag in Document.TAGS_TO_IGNORE:
             return
 
+        tokens = self._extract_css_tokens(elem)
+        if tokens:
+            self._css_token_cache.append(tokens)
+
         flush = elem.tag not in Document.TAGS_INLINE
         if flush:
             self._generate_block()
@@ -152,6 +159,13 @@ class Document(object):
         if elem.tail:
             self._text_cache.append(elem.tail)
 
+        if tokens:
+            self._css_token_cache.pop()
+
+    def _extract_css_tokens(self, elem):
+        class_id = elem.attrib.get('class', '') + ' ' + elem.attrib.get('id', '')
+        return extract_css_tokens(class_id)
+
     def _generate_block(self):
         if not self._text_cache:
             return
@@ -163,7 +177,10 @@ class Document(object):
 
         # TODO: a text block must be longer than 3 words to be eligible for testing as main content
         label = POSITIVE_LABEL if text.count(' ') > 2 and AnchorUtil.remove_markers(text) in self.main_content else NEGATIVE_LABEL
-        self._text_blocks.append(Block(self, label, text, None))
+        css_tokens = Counter()
+        for tokens in self._css_token_cache[-3:]:
+            css_tokens.update(tokens)
+        self._text_blocks.append(Block(self, label, text, css_tokens))
 
         self._text_cache = []
 
@@ -512,3 +529,64 @@ class ContentExtractionModel(object):
     def predict(self, document):
         _, features = self.extract_features([document])
         return self.svm.predict(self.scaler.scale(features))
+
+
+class NaiveBayesModel(object):
+    def train(self, documents):
+        """Note: assumes that POSITIVE_LABEL = 1, NEGATIVE_LABEL = 0."""
+        blocks = []
+        for doc in documents:
+            blocks.extend(doc.get_blocks())
+
+        n_blocks = len(blocks)
+        labels = np.array([block.label for block in blocks])
+        self.positive_prob = np.sum(labels == POSITIVE_LABEL) / n_blocks
+
+        all_tokens = set()
+        for block in blocks:
+            all_tokens.update(block.css_tokens.keys())
+
+        n_tokens = len(all_tokens)
+        # generate a deterministic mapping from token to indix
+        token_list = list(all_tokens)
+        indices = {token: i for i, token in enumerate(token_list)}
+        train_matrix = np.zeros((n_blocks, n_tokens))
+
+        for i, block in enumerate(blocks):
+            for token, count in block.css_tokens.iteritems():
+                train_matrix[i, indices[token]] = count
+
+        self.token_list = token_list
+        self.n_tokens = n_tokens
+        self.indices = indices
+
+        positive_counts = labels.dot(train_matrix) + 1;
+        self.positive_probs = positive_counts / np.sum(positive_counts)
+        negative_counts = (1-labels).dot(train_matrix) + 1;
+        self.negative_probs = negative_counts / np.sum(negative_counts)
+
+        print '>>> Training is over'
+        print '>>> Sparseness: %.2f' % (1.0*np.sum(train_matrix == 0) / (n_blocks*n_tokens))
+
+    def most_indicative_tokens(self, n=10):
+        p_to_n = np.log(self.positive_probs / self.negative_probs).argsort()
+        most_positive = tuple(self.token_list[i] for i in p_to_n[-n:][::-1])
+        most_negative = tuple(self.token_list[i] for i in p_to_n[:n])
+        return (most_positive, most_negative)
+
+    def predict(self, document):
+        blocks = document.get_blocks()
+        n_blocks = len(blocks)
+
+        matrix = np.zeros((n_blocks, self.n_tokens))
+        for i, block in enumerate(blocks):
+            for token, count in block.css_tokens.iteritems():
+                if token in self.indices:
+                    matrix[i, self.indices[token]] = count
+                else:
+                    print 'Warning: %s not in vocabulary' % token
+
+        positive = np.log(self.positive_probs).dot(matrix.T) + np.log(self.positive_prob)
+        negative = np.log(self.negative_probs).dot(matrix.T) + np.log(1-self.positive_prob)
+        classes = positive > negative
+        return [POSITIVE_LABEL if cls else NEGATIVE_LABEL for cls in classes]
