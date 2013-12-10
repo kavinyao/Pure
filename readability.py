@@ -192,6 +192,25 @@ class L3SDocument(Document):
         return self.normalize_html_text(' '.join(text_pieces))
 
 
+def read_unicode_from(file):
+    with open(file) as f:
+        content = f.read()
+        try:
+            return content.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                return content.decode('utf-16')
+            except UnicodeDecodeError:
+                try:
+                    return content.decode('windows-1252')
+                except UnicodeDecodeError:
+                    try:
+                        return content.decode('iso-8859-1')
+                    except UnicodeDecodeError:
+                        print 'Warning: cannot detect encoding of %f, using utf-8 ignore mode...'
+                        return content.decode('utf-8', 'ignore')
+
+
 class DragnetDocument(Document):
     """A document from Dragnet 2012 dataset."""
 
@@ -201,8 +220,7 @@ class DragnetDocument(Document):
     def _get_main_content(self, annotated):
         """Extract annotated main content.
         """
-        with open(annotated) as f:
-            return self.normalize_html_text(f.read().decode('utf-8', 'ignore'))
+        return self.normalize_html_text(read_unicode_from(annotated))
 
 
 class Evaluator(object):
@@ -333,12 +351,11 @@ class HTMLLoader(object):
 
     @staticmethod
     def from_file(filename):
-        with open(filename) as f:
-            html = f.read().decode('utf-8', 'ignore')
-            # lxml doesn't like xml encoding declaration in unicode html
-            html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html)
-            html = basic_cleaner.clean_html(html)
-            return lxml.html.document_fromstring(html)
+        html = read_unicode_from(filename)
+        # lxml doesn't like xml encoding declaration in unicode html
+        html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html)
+        html = basic_cleaner.clean_html(html)
+        return lxml.html.document_fromstring(html)
 
 
 class MatrixScaler(object):
