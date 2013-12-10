@@ -34,13 +34,13 @@ if __name__ == '__main__':
     model = ContentExtractionModel([DensitometricFeatureExtractor], unique=args.unique)
 
     if args.task == 'cv':
-        target, data = model.extract_features(training_documents)
+        labels, features = model.extract_features(training_documents)
 
         scaler = MatrixScaler()
-        scaled_data = scaler.scale_data(data)
+        scaled_features = scaler.scale_data(features)
 
         clf = svm.SVC()
-        scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring=args.scoring)
+        scores = cross_validation.cross_val_score(clf, scaled_features, labels, cv=10, scoring=args.scoring)
         print '%s: %0.2f (+/- %0.2f)' % ((args.scoring or 'Precision').capitalize(), scores.mean(), scores.std()*2)
     elif args.task == 'evaluate' or args.task == 'plot':
         plot = args.task == 'plot'
@@ -51,9 +51,13 @@ if __name__ == '__main__':
         evaluator.evaluate()
         evaluator.report(args.output if plot else None)
     elif args.task == 'dump':
+        labels, features = model.extract_features(training_documents)
+        scaler = MatrixScaler()
+        scaled_features = scaler.scale_data(features)
+
         with open(args.output, 'w') as output:
             for i in xrange(len(labels)):
-                label, feature = labels[i], features[i]
+                label, feature = int(labels[i]), scaled_features[i]
                 line = [str(label)]
                 for j, f in enumerate(feature, 1):
                     line.append('%d:%f' % (j, f))
