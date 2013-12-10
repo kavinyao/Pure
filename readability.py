@@ -409,7 +409,7 @@ class ContentExtractionModel(object):
         self.feature_extractors = feature_extractors
         self.scaler = MatrixScaler()
 
-    def extract_features(self, documents, unique=False):
+    def extract_features(self, documents, unique=False, verbose=True):
         """@return numpy array of labels and features."""
         block_lists = [doc.get_blocks() for doc in documents]
         n_blocks = sum(len(blist) for blist in block_lists)
@@ -430,10 +430,11 @@ class ContentExtractionModel(object):
 
             row = end_row
 
-        # gather label statistics
-        positive_count = np.sum(labels == POSITIVE_LABEL)
-        print '#Examples:', len(labels)
-        print '#Positive:', positive_count
+        if verbose:
+            # gather label statistics
+            positive_count = np.sum(labels == POSITIVE_LABEL)
+            print '#Examples:', len(labels)
+            print '#Positive:', positive_count
 
         return labels, features
 
@@ -447,5 +448,5 @@ class ContentExtractionModel(object):
         print '>>> Training is over'
 
     def predict(self, document):
-        _, features = self.extract_features([document])
+        _, features = self.extract_features([document], verbose=False)
         return self.svm.predict(self.scaler.scale(features))
