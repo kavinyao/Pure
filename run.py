@@ -3,53 +3,10 @@ import random
 import numpy as np
 from argparse import ArgumentParser
 from sklearn import svm, cross_validation
-from readability import L3SDocumentLoader, DragnetDocumentLoader, DensitometricFeatureExtractor, Evaluator
-
-class MatrixScaler(object):
-    """Scale features to [-1, 1] or [0, 1], as recommended by [Lin 2003]."""
-
-    def scale_train(self, matrix):
-        """Scale and remember scaling factors.
-        @param matrix 2-D numpy array
-        """
-        self.scaling_factors = []
-        for c in xrange(matrix.shape[1]):
-            col = matrix[:,c]
-            non_negative = np.all(col >= 0)
-            if non_negative:
-                _min, _max = col.min(), col.max()
-                _range = _max-_min
-                if _range > 0:
-                    matrix[:,c] = (col-_min)/_range
-                self.scaling_factors.append((non_negative, _min, _range))
-            else:
-                _max = np.abs(c).max()
-                if _max > 0:
-                    matrix[:,c] = col / _max
-                self.scaling_factors.append((non_negative, _max))
-
-        return matrix
-
-    def scale(self, matrix):
-        """Scale a new matrix.
-        @param matrix 2-D numpy array as in scale_train
-        """
-        for c in xrange(matrix.shape[1]):
-            col = matrix[:,c]
-            config = self.scaling_factors[c]
-            non_negative = config[0]
-            if non_negative:
-                _min, _max = config[1:]
-                _range = _max-_min
-                if _range > 0:
-                    matrix[:,c] = (col-_min)/_range
-            else:
-                _max = self.scaling_factors[1]
-                if _max > 0:
-                    matrix[:,c] = col / _max
-
-        return matrix
-
+from readability import L3SDocumentLoader, DragnetDocumentLoader
+from readability import DensitometricFeatureExtractor
+from readability import ContentExtractionModel, Evaluator, MatrixScaler
+from readability import POSITIVE_LABEL, NEGATIVE_LABEL
 
 def train_model(documents):
     features = []
@@ -97,49 +54,32 @@ if __name__ == '__main__':
     documents = loader.get_documents(args.limit)
     training_documents = documents if args.task != 'evaluate' else documents[:int(len(documents)*args.ratio)]
 
-    raw_features = []
-    raw_labels = []
-    for doc in training_documents:
-        doc_features, doc_labels = doc.get_training_example(DensitometricFeatureExtractor)
-        raw_features.extend(doc_features)
-        raw_labels.extend(doc_labels)
+    model = ContentExtractionModel([DensitometricFeatureExtractor])
 
     if args.unique:
-        unique_examples = set(t for t in zip(raw_labels, (tuple(fs) for fs in raw_features)))
-        labels, features = [], []
-        for t in unique_examples:
-            labels.append(t[0])
-            features.append(t[1])
-    else:
-        labels, features = raw_labels, raw_features
-
-    assert len(raw_features[0]) == len(features[0])
-    print '#Examples:', len(labels)
-    print '#Positive:', labels.count(1)
+        # TODO
+        raise NotImplementedError
 
     if args.task == 'cv':
-        data = np.array(features)
-        target = np.array(labels)
+        target, data = model.extract_features(training_documents)
+
+        # gather label statistics
+        positive_count = np.sum(target == POSITIVE_LABEL)
+        print '#Examples:', len(target)
+        print '#Positive:', positive_count
 
         scaler = MatrixScaler()
-        scaled_data = scaler.scale_train(data)
+        scaled_data = scaler.scale_data(data)
 
         clf = svm.SVC()
         scores = cross_validation.cross_val_score(clf, scaled_data, target, cv=10, scoring=args.scoring)
         print '%s: %0.2f (+/- %0.2f)' % ((args.scoring or 'Precision').capitalize(), scores.mean(), scores.std()*2)
     elif args.task == 'evaluate' or args.task == 'plot':
         plot = args.task == 'plot'
-        data = np.array(features)
-        target = np.array(labels)
-
-        scaler = MatrixScaler()
-        scaled_data = scaler.scale_train(data)
-
-        clf = svm.SVC()
-        clf.fit(data, target)
+        model.train(training_documents)
 
         test_documents = documents if plot else documents[int(len(documents)*args.ratio):]
-        evaluator = Evaluator(test_documents, DensitometricFeatureExtractor, clf, scaler)
+        evaluator = Evaluator(test_documents, model)
         evaluator.evaluate()
         evaluator.report(args.output if plot else None)
     elif args.task == 'dump':

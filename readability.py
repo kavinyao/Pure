@@ -3,7 +3,11 @@ import re
 import random
 import lxml.html
 import numpy as np
+from sklearn import svm
 from lxml.html.clean import Cleaner
+
+POSITIVE_LABEL = 1
+NEGATIVE_LABEL = 0
 
 class DocumentLoader(object):
     """Load documents from specified directory."""
@@ -49,6 +53,18 @@ class DragnetDocumentLoader(DocumentLoader):
         return DragnetDocument(original, '%s.corrected.txt' % annotated)
 
 
+class Block(object):
+    def __init__(self, label, text, tokens):
+        """
+        @param label POSITIVE_LABEL or NEGATIVE_LABEL
+        @param text text with possibly inserted anchor markers
+        @param tokens words extracted from id/class attribute
+        """
+        self.label = label
+        self.text = text
+        self.tokens = tokens
+
+
 class Document(object):
     """A generic HTML document for extraction."""
     BLANK_REGEX = re.compile(r'\s+')
@@ -65,35 +81,35 @@ class Document(object):
         self.main_content = self._get_main_content(annotated)
         #print self.main_content
 
+        # for collecting text blocks
+        self._text_cache = []
+        self._text_blocks = []
+        self._text_blocks_generated = False
+
     def _get_main_content(self, annotated):
         raise NotImplementedError
 
     def __repr__(self):
         return 'Document <%s>' % (os.path.basename(self.original))
 
-    def get_training_example(self, feature_extractor):
-        """Get text block training example from this document.
-        @return (feature_matrix, label_vector)
+    def get_blocks(self):
+        """Get text blocks from this document.
+        @return list<Block>
         """
-        print 'generating traing examples', self
+        if self._text_blocks_generated:
+            return self._text_blocks
 
-        # collect text blocks
-        self._text_cache = []
-        self._text_blocks = []
+        print 'generating text blocks', self
         self._traverse(self.html_doc.body)
+        self._text_blocks_generated = True
 
-        # generate features
-        feature_matrix = feature_extractor.extract(self._text_blocks)
-        # TODO: a text block must be longer than 3 words to be eligible for testing as main content
-        labels = [1 if block.count(' ') > 2 and block in self.main_content else 0 for block in self._text_blocks]
-
-        return feature_matrix, labels
+        return self._text_blocks
 
     def extract_article(self, block_classes):
         article_blocks = []
         for i in xrange(len(block_classes)):
-            if block_classes[i] == 1:
-                article_blocks.append(self._text_blocks[i])
+            if block_classes[i] == POSITIVE_LABEL:
+                article_blocks.append(AnchorUtil.remove_markers(self._text_blocks[i].text))
 
         if not article_blocks:
             print '[WARN]: nothing extracted from %s, returning all content' % self
@@ -134,12 +150,14 @@ class Document(object):
         if not self._text_cache:
             return
 
-        text_block = self.normalize_html_text(' '.join(self._text_cache))
-        if text_block == '':
+        text = self.normalize_html_text(' '.join(self._text_cache))
+        if text == '':
+            self._text_cache = []
             return
 
-        self._text_blocks.append(text_block)
-        #print '%d. |%s|' % (self._labels[-1], text_block)
+        # TODO: a text block must be longer than 3 words to be eligible for testing as main content
+        label = POSITIVE_LABEL if text.count(' ') > 2 and AnchorUtil.remove_markers(text) in self.main_content else NEGATIVE_LABEL
+        self._text_blocks.append(Block(label, text, None))
 
         self._text_cache = []
 
@@ -190,27 +208,20 @@ class DragnetDocument(Document):
 class Evaluator(object):
     """Evaluate content extraction based against trained model."""
 
-    def __init__(self, docs, fe, model, scaler):
+    def __init__(self, docs, model):
         """
         @param docs list<Document> to test
-        @param fe feature extractor to use
-        @param model classifier model trained
-        @param scaler MatrixScaler to scale feature data
+        @param model an extraction model with predict method
         """
         self.documents = docs
-        self.feature_extractor = fe
         self.model = model
-        self.scaler = scaler
 
     def evaluate(self):
         self.precisions = []
         self.recalls = []
 
         for doc in self.documents:
-            features, _ = doc.get_training_example(self.feature_extractor)
-            features = self.scaler.scale(np.array(features))
-            classes = self.model.predict(features)
-
+            classes = self.model.predict(doc)
             extracted_content = doc.extract_article(classes)
             main_content = doc.get_main_content()
 
@@ -265,6 +276,7 @@ class AnchorUtil(object):
 
 class DensitometricFeatureExtractor(object):
     LINE_DELIMITERS = '.,?!'
+    n_features = 7
 
     @staticmethod
     def extract(text_blocks):
@@ -273,14 +285,14 @@ class DensitometricFeatureExtractor(object):
         features = []
         for text_block in text_blocks:
             # remove link markers
-            block = AnchorUtil.remove_markers(text_block)
+            block = AnchorUtil.remove_markers(text_block.text)
             # crude word and lines count
             words = block.count(' ')
             lines = DensitometricFeatureExtractor.count_lines(block)
             sentences = DensitometricFeatureExtractor.count_sentences(block)
 
             # extract link text
-            link_text = AnchorUtil.extract_anchor_text(text_block)
+            link_text = AnchorUtil.extract_anchor_text(text_block.text)
             link_words = link_text.count(' ')
 
             # prevent division by zero
@@ -327,3 +339,91 @@ class HTMLLoader(object):
             html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html)
             html = basic_cleaner.clean_html(html)
             return lxml.html.document_fromstring(html)
+
+
+class MatrixScaler(object):
+    """Scale features to [-1, 1] or [0, 1], as recommended by [Lin 2003]."""
+
+    def scale_data(self, matrix):
+        """Scale and remember scaling factors.
+        @param matrix 2-D numpy array
+        """
+        self.scaling_factors = []
+        for c in xrange(matrix.shape[1]):
+            col = matrix[:,c]
+            non_negative = np.all(col >= 0)
+            if non_negative:
+                _min, _max = col.min(), col.max()
+                _range = _max-_min
+                if _range > 0:
+                    matrix[:,c] = (col-_min)/_range
+                self.scaling_factors.append((non_negative, _min, _range))
+            else:
+                _max = np.abs(c).max()
+                if _max > 0:
+                    matrix[:,c] = col / _max
+                self.scaling_factors.append((non_negative, _max))
+
+        return matrix
+
+    def scale(self, matrix):
+        """Scale a new matrix.
+        @param matrix 2-D numpy array as in scale_train
+        """
+        for c in xrange(matrix.shape[1]):
+            col = matrix[:,c]
+            config = self.scaling_factors[c]
+            non_negative = config[0]
+            if non_negative:
+                _min, _max = config[1:]
+                _range = _max-_min
+                if _range > 0:
+                    matrix[:,c] = (col-_min)/_range
+            else:
+                _max = self.scaling_factors[1]
+                if _max > 0:
+                    matrix[:,c] = col / _max
+
+        return matrix
+
+
+class ContentExtractionModel(object):
+    def __init__(self, feature_extractors):
+        self.feature_extractors = feature_extractors
+        self.scaler = MatrixScaler()
+
+    def extract_features(self, documents, unique=False):
+        """@return numpy array of labels and features."""
+        block_lists = [doc.get_blocks() for doc in documents]
+        n_blocks = sum(len(blist) for blist in block_lists)
+        n_features = sum(fe.n_features for fe in self.feature_extractors)
+
+        features = np.zeros((n_blocks, n_features))
+        labels = np.zeros(n_blocks)
+        row = 0
+        for blist in block_lists:
+            end_row = row + len(blist)
+            labels[row:end_row] = [block.label for block in blist]
+
+            col = 0
+            for fe in self.feature_extractors:
+                end_col = col + fe.n_features
+                features[row:end_row, col:end_col] = fe.extract(blist)
+                col = end_col
+
+            row = end_row
+
+        return labels, features
+
+    def train(self, documents, unique=False):
+        labels, features = self.extract_features(documents, unique)
+        scaled_features = self.scaler.scale_data(features)
+
+        self.svm = svm.SVC()
+        self.svm.fit(scaled_features, labels)
+
+        print '>>> Training is over'
+
+    def predict(self, document):
+        _, features = self.extract_features([document])
+        return self.svm.predict(self.scaler.scale(features))
