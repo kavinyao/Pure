@@ -124,10 +124,10 @@ class Document(object):
     TAGS_INLINE = set('a,b,big,i,small,tt,abbr,acronym,cite,code,dfn,em,kbd,strong,samp,var,bdo,br,img,map,object,q,span,sub,sup,button,input,label,select,textarea'.split(','))
 
     def _traverse(self, elem, depth=0):
-        if elem.tag in L3SDocument.TAGS_TO_IGNORE:
+        if elem.tag in Document.TAGS_TO_IGNORE:
             return
 
-        flush = elem.tag not in L3SDocument.TAGS_INLINE
+        flush = elem.tag not in Document.TAGS_INLINE
         if flush:
             self._generate_block()
 
@@ -162,7 +162,7 @@ class Document(object):
         self._text_cache = []
 
     def normalize_html_text(self, text):
-        return L3SDocument.BLANK_REGEX.sub(' ', text).strip()
+        return Document.BLANK_REGEX.sub(' ', text).strip()
 
 
 class L3SDocument(Document):
