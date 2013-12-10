@@ -121,7 +121,8 @@ class Document(object):
         return self.main_content
 
     TAGS_TO_IGNORE = set('style,script,option,object,embed,applet,link,noscript'.split(','))
-    TAGS_INLINE = set('a,b,big,i,small,tt,abbr,acronym,cite,code,dfn,em,kbd,strong,samp,var,bdo,br,img,map,object,q,span,sub,sup,button,input,label,select,textarea'.split(','))
+    # Note: <br> not considered inline as it modifies visual structure
+    TAGS_INLINE = set('a,b,big,i,small,tt,abbr,acronym,cite,code,dfn,em,kbd,strong,samp,var,bdo,img,map,object,q,span,sub,sup,button,input,label,select,textarea'.split(','))
 
     def _traverse(self, elem, depth=0):
         if elem.tag in Document.TAGS_TO_IGNORE:
