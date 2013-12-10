@@ -28,6 +28,8 @@ class DocumentLoader(object):
             files = random.sample(files, limit)
 
         documents = [self.generate_document(f) for f in files]
+
+        print 'Loading over...'
         return documents
 
     def generate_document(self, file_name):
@@ -75,6 +77,7 @@ class Block(object):
 class Document(object):
     """A generic HTML document for extraction."""
     BLANK_REGEX = re.compile(r'\s+')
+    CSS_DEPTH = 5
 
     def __init__(self, original, annotated):
         """
@@ -83,7 +86,7 @@ class Document(object):
         """
         self.original = original
 
-        print 'loading', self
+        # print 'loading', self
         self.html_doc = HTMLLoader.from_file(original)
         self.main_content = self._get_main_content(annotated)
         #print self.main_content
@@ -178,7 +181,7 @@ class Document(object):
         # TODO: a text block must be longer than 3 words to be eligible for testing as main content
         label = POSITIVE_LABEL if text.count(' ') > 2 and AnchorUtil.remove_markers(text) in self.main_content else NEGATIVE_LABEL
         css_tokens = Counter()
-        for tokens in self._css_token_cache[-3:]:
+        for tokens in self._css_token_cache[-Document.CSS_DEPTH:]:
             css_tokens.update(tokens)
         self._text_blocks.append(Block(self, label, text, css_tokens))
 
@@ -556,6 +559,8 @@ class NaiveBayesModel(object):
             for token, count in block.css_tokens.iteritems():
                 train_matrix[i, indices[token]] = count
 
+        # print '>>> Sparseness: %.2f' % (1.0*np.sum(train_matrix == 0) / (n_blocks*n_tokens))
+
         self.token_list = token_list
         self.n_tokens = n_tokens
         self.indices = indices
@@ -566,12 +571,12 @@ class NaiveBayesModel(object):
         self.negative_probs = negative_counts / np.sum(negative_counts)
 
         print '>>> Training is over'
-        print '>>> Sparseness: %.2f' % (1.0*np.sum(train_matrix == 0) / (n_blocks*n_tokens))
 
     def most_indicative_tokens(self, n=10):
-        p_to_n = np.log(self.positive_probs / self.negative_probs).argsort()
-        most_positive = tuple(self.token_list[i] for i in p_to_n[-n:][::-1])
-        most_negative = tuple(self.token_list[i] for i in p_to_n[:n])
+        p_to_n = np.log(self.positive_probs / self.negative_probs)
+        indices = p_to_n.argsort()
+        most_positive = tuple((self.token_list[i], p_to_n[i]) for i in indices[-n:][::-1])
+        most_negative = tuple((self.token_list[i], p_to_n[i]) for i in indices[:n])
         return (most_positive, most_negative)
 
     def predict(self, document):
