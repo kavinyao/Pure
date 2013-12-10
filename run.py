@@ -4,7 +4,7 @@ import numpy as np
 from argparse import ArgumentParser
 from sklearn import svm, cross_validation
 from readability import L3SDocumentLoader, DragnetDocumentLoader
-from readability import DensitometricFeatureExtractor
+from readability import DensitometricFeatureExtractor, RelativePositionFeatureExtractor
 from readability import ContentExtractionModel, Evaluator, MatrixScaler
 from readability import POSITIVE_LABEL, NEGATIVE_LABEL
 

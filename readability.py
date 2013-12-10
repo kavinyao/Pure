@@ -1,5 +1,6 @@
 import os
 import re
+import math
 import random
 import lxml.html
 import numpy as np
@@ -297,6 +298,22 @@ class AnchorUtil(object):
         return AnchorUtil.ignore_re.sub('', text)
 
 
+class RelativePositionFeatureExtractor(object):
+    BUCKETS = 5
+    n_features = 1
+
+    @staticmethod
+    def extract(blocks):
+        """
+        @param blocks blocks of the same document, ordered by position
+        """
+        n = len(blocks)
+        bucket_size = 1.0 * n / RelativePositionFeatureExtractor.BUCKETS
+        # discretize
+        features = [math.ceil(i/bucket_size) for i in range(1, n+1)]
+        return np.array(features).reshape((n, 1))
+
+
 class DensitometricFeatureExtractor(object):
     LINE_DELIMITERS = '.,?!'
     NUM_WORDS_CAP = 500
@@ -455,6 +472,8 @@ class ContentExtractionModel(object):
         features = np.zeros((n_blocks, n_features))
         labels = np.zeros(n_blocks)
         row = 0
+        # run feature extraction document by document as some feature extraction
+        # may assume the blocks belongs to the same document
         for blist in block_lists:
             end_row = row + len(blist)
             labels[row:end_row] = [block.label for block in blist]
