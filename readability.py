@@ -254,21 +254,28 @@ class DragnetDocument(Document):
 class Evaluator(object):
     """Evaluate content extraction based against trained model."""
 
-    def __init__(self, docs, model):
+    def __init__(self, model):
         """
         @param docs list<Document> to test
         @param model an extraction model with predict method
         """
-        self.documents = docs
         self.model = model
-
-    def evaluate(self):
         self.precisions = []
         self.recalls = []
+        self.f1s = []
         self.lcs_precisions = []
         self.lcs_recalls = []
+        self.lcs_f1s = []
 
-        for doc in self.documents:
+    def evaluate(self, training_docs, test_docs):
+        self.model.train(training_docs)
+
+        precisions = []
+        recalls = []
+        lcs_precisions = []
+        lcs_recalls = []
+
+        for doc in test_docs:
             classes = self.model.predict(doc)
             extracted_content = doc.extract_article(classes)
             main_content = doc.get_main_content()
@@ -284,8 +291,8 @@ class Evaluator(object):
                 common_words = set(['CANNOT_BELIEVE_THIS'])
                 log('WARN: no word predicted accurately for %s' % doc, WARNING)
 
-            self.precisions.append(1.0*len(common_words)/len(e_words))
-            self.recalls.append(1.0*len(common_words)/len(m_words))
+            precisions.append(1.0*len(common_words)/len(e_words))
+            recalls.append(1.0*len(common_words)/len(m_words))
 
             # do common subsequence comparison
             flags = check_inclusion(e_list, m_list)
@@ -294,31 +301,45 @@ class Evaluator(object):
                 n_common = 1
                 log('WARN: no common sequence extracted for' % doc, WARNING)
 
-            self.lcs_precisions.append(1.0*n_common/len(e_list))
-            self.lcs_recalls.append(1.0*n_common/len(m_list))
+            lcs_precisions.append(1.0*n_common/len(e_list))
+            lcs_recalls.append(1.0*n_common/len(m_list))
+
+        f_measures = [2/(1/p+1/r) for p,r in zip(precisions, recalls)]
+        avg_prec = Evaluator.average(precisions)
+        avg_rec = Evaluator.average(recalls)
+        avg_f1 = Evaluator.average(f_measures)
+        log('Average prec: %.4f' % avg_prec, CRITICAL)
+        log('Average rec:  %.4f' % avg_rec, CRITICAL)
+        log('Average F1:   %.4f' % avg_f1, CRITICAL)
+
+        lcs_f_measures = [2/(1/p+1/r) for p,r in zip(lcs_precisions, lcs_recalls)]
+        avg_lcs_prec = Evaluator.average(lcs_precisions)
+        avg_lcs_rec = Evaluator.average(lcs_recalls)
+        avg_lcs_f1 = Evaluator.average(lcs_f_measures)
+        log('Average LCS prec: %.4f' % avg_lcs_prec, CRITICAL)
+        log('Average LCS rec:  %.4f' % avg_lcs_rec, CRITICAL)
+        log('Average LCS F1:   %.4f' % avg_lcs_f1, CRITICAL)
+
+        self.precisions.append(avg_prec)
+        self.recalls.append(avg_rec)
+        self.f1s.append(avg_f1)
+        self.lcs_precisions.append(avg_lcs_prec)
+        self.lcs_recalls.append(avg_lcs_rec)
+        self.lcs_f1s.append(avg_lcs_f1)
+
+    def report(self):
+        log('', CRITICAL)
+        log('Final average prec: %.4f' % Evaluator.average(self.precisions), CRITICAL)
+        log('Final average rec:  %.4f' % Evaluator.average(self.recalls), CRITICAL)
+        log('Final average F1:   %.4f' % Evaluator.average(self.f1s), CRITICAL)
+
+        log('Final average LCS prec: %.4f' % Evaluator.average(self.lcs_precisions), CRITICAL)
+        log('Final average LCS rec:  %.4f' % Evaluator.average(self.lcs_recalls), CRITICAL)
+        log('Final average LCS F1:   %.4f' % Evaluator.average(self.lcs_f1s), CRITICAL)
 
     @staticmethod
     def average(numbers):
         return 1.0 * sum(numbers) / len(numbers)
-
-    def report(self, out_file=None):
-        """
-        @param out_file if set, will save data to the specified file
-        """
-        f_measures = [2/(1/p+1/r) for p,r in zip(self.precisions, self.recalls)]
-        log('Average prec: %.4f' % Evaluator.average(self.precisions), CRITICAL)
-        log('Average recl: %.4f' % Evaluator.average(self.recalls), CRITICAL)
-        log('Average F1:   %.4f' % Evaluator.average(f_measures), CRITICAL)
-
-        lcs_f_measures = [2/(1/p+1/r) for p,r in zip(self.lcs_precisions, self.lcs_recalls)]
-        log('Average LCS prec: %.4f' % Evaluator.average(self.lcs_precisions), CRITICAL)
-        log('Average LCS recl: %.4f' % Evaluator.average(self.lcs_recalls), CRITICAL)
-        log('Average LCS F1:   %.4f' % Evaluator.average(lcs_f_measures), CRITICAL)
-
-        if out_file:
-            with open(out_file, 'w') as pd:
-                for f in f_measures:
-                    pd.write('%.4f\n' % f)
 
 
 class AnchorUtil(object):

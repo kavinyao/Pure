@@ -44,12 +44,9 @@ if __name__ == '__main__':
         print '%s: %0.2f (+/- %0.2f)' % ((args.scoring or 'Precision').capitalize(), scores.mean(), scores.std()*2)
     elif args.task == 'evaluate' or args.task == 'plot':
         plot = args.task == 'plot'
-        model.train(training_documents)
-
         test_documents = documents if plot else documents[int(len(documents)*args.ratio):]
-        evaluator = Evaluator(test_documents, model)
-        evaluator.evaluate()
-        evaluator.report(args.output if plot else None)
+        evaluator = Evaluator(model)
+        evaluator.evaluate(training_documents, test_documents)
     elif args.task == 'dump':
         labels, features = model.extract_features(training_documents)
         scaler = MatrixScaler()

@@ -35,13 +35,13 @@ if __name__ == '__main__':
     n_documents = len(documents)
     round_size = n_documents / args.k
 
+    evaluator = Evaluator(model)
+
     for i in range(args.k):
         print '\nRound %d/%d...' % (i+1, args.k)
         test_documents = documents[i*round_size:(i+1)*round_size]
         training_documents = documents[:i*round_size] + documents[(i+1)*round_size:]
 
-        model.train(training_documents)
+        evaluator.evaluate(training_documents, test_documents)
 
-        evaluator = Evaluator(test_documents, model)
-        evaluator.evaluate()
-        evaluator.report()
+    evaluator.report()
