@@ -299,7 +299,7 @@ class Evaluator(object):
             n_common = sum(flags)
             if n_common == 0:
                 n_common = 1
-                log('WARN: no common sequence extracted for' % doc, WARNING)
+                log('WARN: no common sequence extracted for %s' % doc, WARNING)
 
             lcs_precisions.append(1.0*n_common/len(e_list))
             lcs_recalls.append(1.0*n_common/len(m_list))
