@@ -345,6 +345,10 @@ class RelativePositionFeatureExtractor(object):
     n_features = 1
 
     @staticmethod
+    def need_training():
+        return False
+
+    @staticmethod
     def extract(blocks):
         """
         @param blocks blocks of the same document, ordered by position
@@ -362,6 +366,10 @@ class DensitometricFeatureExtractor(object):
     NUM_WORDS_PER_SENTENCE_CAP = 50
 
     n_features = 7
+
+    @staticmethod
+    def need_training():
+        return False
 
     @staticmethod
     def extract(text_blocks):
@@ -423,6 +431,36 @@ class DensitometricFeatureExtractor(object):
     @staticmethod
     def count_lines(text):
         return len(text) / 80
+
+
+class IndicativeClassTokenFeatureExtractor(object):
+    """Learn css/id tokens from NB which are most indicative of non-content.
+    Use the tokens as binary features."""
+
+    def __init__(self, top_n=10):
+        self.nb = NaiveBayesModel()
+        self.n_features = top_n
+
+    def need_training(self):
+        return True
+
+    def train(self, documents):
+        self.nb.train(documents)
+        _, most_negative = self.nb.most_indicative_tokens(self.n_features)
+        if len(most_negative) != self.n_features:
+            print 'Warning: not enough negative tokens'
+        self.negative_tokens = [t for t, _ in most_negative]
+
+    def extract(self, blocks):
+        n_blocks = len(blocks)
+        features = np.zeros((n_blocks, self.n_features))
+
+        for r, block in enumerate(blocks):
+            for c, token in enumerate(self.negative_tokens):
+                if block.css_tokens[token] > 0:
+                    features[r,c] = 1
+
+        return features
 
 
 basic_cleaner = Cleaner(forms=False, style=False, meta=False, page_structure=False, remove_unknown_tags=False, safe_attrs_only=False)
@@ -543,6 +581,12 @@ class ContentExtractionModel(object):
         return labels, features
 
     def train(self, documents):
+        # for feature extractor which need to know information about all documents
+        # before extracting features
+        for fe in self.feature_extractors:
+            if fe.need_training():
+                fe.train(documents)
+
         labels, features = self.extract_features(documents)
         scaled_features = self.scaler.scale_data(features)
 
@@ -592,7 +636,7 @@ class NaiveBayesModel(object):
         negative_counts = (1-labels).dot(train_matrix) + 1;
         self.negative_probs = negative_counts / np.sum(negative_counts)
 
-        print '>>> Training is over'
+        print '>>> NB Training is over'
 
     def most_indicative_tokens(self, n=10):
         p_to_n = np.log(self.positive_probs / self.negative_probs)
