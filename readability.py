@@ -112,7 +112,7 @@ class Document(object):
         if self._text_blocks_generated:
             return self._text_blocks
 
-        print 'generating text blocks', self
+        # print 'generating text blocks', self
         self._traverse(self.html_doc.body)
         self._text_blocks_generated = True
 
