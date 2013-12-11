@@ -24,3 +24,6 @@ if __name__ == '__main__':
     print_pairs(most_indicative[0])
     print 'Most negative:'
     print_pairs(most_indicative[1])
+
+    print 'Predicting sample document...'
+    print docs[0].extract_article(nb.predict(docs[0]))

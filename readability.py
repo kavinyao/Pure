@@ -593,5 +593,5 @@ class NaiveBayesModel(object):
 
         positive = np.log(self.positive_probs).dot(matrix.T) + np.log(self.positive_prob)
         negative = np.log(self.negative_probs).dot(matrix.T) + np.log(1-self.positive_prob)
-        classes = positive > negative
+        classes = positive >= negative
         return [POSITIVE_LABEL if cls else NEGATIVE_LABEL for cls in classes]
