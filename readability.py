@@ -10,6 +10,7 @@ from lxml.html.clean import Cleaner
 
 from util import extract_css_tokens
 from lcs import check_inclusion
+from logging import log, WARNING, CRITICAL
 
 POSITIVE_LABEL = 1
 NEGATIVE_LABEL = 0
@@ -31,7 +32,7 @@ class DocumentLoader(object):
 
         documents = [self.generate_document(f) for f in files]
 
-        print 'Loading over...'
+        log('Loading over...', CRITICAL)
         return documents
 
     def generate_document(self, file_name):
@@ -88,10 +89,9 @@ class Document(object):
         """
         self.original = original
 
-        # print 'loading', self
+        log('loading %s' % self)
         self.html_doc = HTMLLoader.from_file(original)
         self.main_content = self._get_main_content(annotated)
-        #print self.main_content
 
         # for collecting text blocks
         self._text_cache = []
@@ -112,7 +112,7 @@ class Document(object):
         if self._text_blocks_generated:
             return self._text_blocks
 
-        # print 'generating text blocks', self
+        log('generating text blocks %s' % self)
         self._traverse(self.html_doc.body)
         self._text_blocks_generated = True
 
@@ -125,7 +125,7 @@ class Document(object):
                 article_blocks.append(AnchorUtil.remove_markers(self._text_blocks[i].text))
 
         if not article_blocks:
-            print '[WARN]: nothing extracted from %s, returning all content' % self
+            log('[WARN]: nothing extracted from %s, returning all content' % self, WARNING)
             return self.normalize_html_text(self.html_doc.body.text_content())
         else:
             return self.normalize_html_text('\n'.join(article_blocks))
@@ -235,7 +235,7 @@ def read_unicode_from(file):
                     try:
                         return content.decode('iso-8859-1')
                     except UnicodeDecodeError:
-                        print 'Warning: cannot detect encoding of %f, using utf-8 ignore mode...'
+                        log('Warning: cannot detect encoding of %f, using utf-8 ignore mode...' % file, WARNING)
                         return content.decode('utf-8', 'ignore')
 
 
@@ -282,7 +282,7 @@ class Evaluator(object):
             common_words = e_words.intersection(m_words)
             if not common_words:
                 common_words = set(['CANNOT_BELIEVE_THIS'])
-                print 'WARN: no word predicted accurately for', doc
+                log('WARN: no word predicted accurately for %s' % doc, WARNING)
 
             self.precisions.append(1.0*len(common_words)/len(e_words))
             self.recalls.append(1.0*len(common_words)/len(m_words))
@@ -292,7 +292,7 @@ class Evaluator(object):
             n_common = sum(flags)
             if n_common == 0:
                 n_common = 1
-                print 'WARN: no common sequence extracted for', doc
+                log('WARN: no common sequence extracted for' % doc, WARNING)
 
             self.lcs_precisions.append(1.0*n_common/len(e_list))
             self.lcs_recalls.append(1.0*n_common/len(m_list))
@@ -306,14 +306,14 @@ class Evaluator(object):
         @param out_file if set, will save data to the specified file
         """
         f_measures = [2/(1/p+1/r) for p,r in zip(self.precisions, self.recalls)]
-        print 'Average precision', Evaluator.average(self.precisions)
-        print 'Average recall', Evaluator.average(self.recalls)
-        print 'Average F-measure', Evaluator.average(f_measures)
+        log('Average prec: %.4f' % Evaluator.average(self.precisions), CRITICAL)
+        log('Average recl: %.4f' % Evaluator.average(self.recalls), CRITICAL)
+        log('Average F1:   %.4f' % Evaluator.average(f_measures), CRITICAL)
 
         lcs_f_measures = [2/(1/p+1/r) for p,r in zip(self.lcs_precisions, self.lcs_recalls)]
-        print 'Average LCS precision', Evaluator.average(self.lcs_precisions)
-        print 'Average LCS recall', Evaluator.average(self.lcs_recalls)
-        print 'Average LCS F-measure', Evaluator.average(lcs_f_measures)
+        log('Average LCS prec: %.4f' % Evaluator.average(self.lcs_precisions), CRITICAL)
+        log('Average LCS recl: %.4f' % Evaluator.average(self.lcs_recalls), CRITICAL)
+        log('Average LCS F1:   %.4f' % Evaluator.average(lcs_f_measures), CRITICAL)
 
         if out_file:
             with open(out_file, 'w') as pd:
@@ -400,11 +400,11 @@ class DensitometricFeatureExtractor(object):
 
             # regularization to avoid influence of outliers
             if num_words > DensitometricFeatureExtractor.NUM_WORDS_CAP:
-                print 'Warning: %s has more than %d words (%d), capping...' % (text_block, DensitometricFeatureExtractor.NUM_WORDS_CAP, num_words)
+                log('Warning: %s has more than %d words (%d), capping...' % (text_block, DensitometricFeatureExtractor.NUM_WORDS_CAP, num_words), WARNING)
                 num_words = DensitometricFeatureExtractor.NUM_WORDS_CAP
 
             if num_words_per_sentence > DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP:
-                print 'Warning: %s has more than %d words/sentence (%d), capping...' % (text_block, DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP, num_words_per_sentence)
+                log('Warning: %s has more than %d words/sentence (%d), capping...' % (text_block, DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP, num_words_per_sentence), WARNING)
                 num_words_per_sentence = DensitometricFeatureExtractor.NUM_WORDS_PER_SENTENCE_CAP
 
             # number of words, average sentence length, text density, link density
@@ -448,7 +448,7 @@ class IndicativeClassTokenFeatureExtractor(object):
         self.nb.train(documents)
         _, most_negative = self.nb.most_indicative_tokens(self.n_features)
         if len(most_negative) != self.n_features:
-            print 'Warning: not enough negative tokens'
+            log('Warning: not enough negative tokens', WARNING)
         self.negative_tokens = [t for t, _ in most_negative]
 
     def extract(self, blocks):
@@ -575,8 +575,8 @@ class ContentExtractionModel(object):
         if batch_mode:
             # gather label statistics
             positive_count = np.sum(labels == POSITIVE_LABEL)
-            print '#Examples:', len(labels)
-            print '#Positive:', positive_count
+            log('#Examples: %d' % len(labels), CRITICAL)
+            log('#Positive: %d' % positive_count, CRITICAL)
 
         return labels, features
 
@@ -593,7 +593,7 @@ class ContentExtractionModel(object):
         self.svm = svm.SVC()
         self.svm.fit(scaled_features, labels)
 
-        print '>>> Training is over'
+        log('>>> Training is over', CRITICAL)
 
     def predict(self, document):
         _, features = self.extract_features([document])
@@ -625,7 +625,7 @@ class NaiveBayesModel(object):
             for token, count in block.css_tokens.iteritems():
                 train_matrix[i, indices[token]] = count
 
-        # print '>>> Sparseness: %.2f' % (1.0*np.sum(train_matrix == 0) / (n_blocks*n_tokens))
+        log('>>> Sparseness: %.2f' % (1.0*np.sum(train_matrix == 0) / (n_blocks*n_tokens)), WARNING)
 
         self.token_list = token_list
         self.n_tokens = n_tokens
@@ -636,7 +636,7 @@ class NaiveBayesModel(object):
         negative_counts = (1-labels).dot(train_matrix) + 1;
         self.negative_probs = negative_counts / np.sum(negative_counts)
 
-        print '>>> NB Training is over'
+        log('>>> NB Training is over', CRITICAL)
 
     def most_indicative_tokens(self, n=10):
         p_to_n = np.log(self.positive_probs / self.negative_probs)
@@ -655,7 +655,7 @@ class NaiveBayesModel(object):
                 if token in self.indices:
                     matrix[i, self.indices[token]] = count
                 else:
-                    print 'Warning: %s not in vocabulary' % token
+                    log('Warning: %s not in vocabulary' % token, WARNING)
 
         positive = np.log(self.positive_probs).dot(matrix.T) + np.log(self.positive_prob)
         negative = np.log(self.negative_probs).dot(matrix.T) + np.log(1-self.positive_prob)

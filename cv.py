@@ -1,12 +1,10 @@
-import sys
-import random
-import numpy as np
 from argparse import ArgumentParser
-from sklearn import svm, cross_validation
 from readability import L3SDocumentLoader, DragnetDocumentLoader
 from readability import DensitometricFeatureExtractor, RelativePositionFeatureExtractor, IndicativeClassTokenFeatureExtractor
-from readability import ContentExtractionModel, Evaluator, MatrixScaler
-from readability import POSITIVE_LABEL, NEGATIVE_LABEL
+from readability import ContentExtractionModel, Evaluator
+
+import logging
+logging.current_level = logging.CRITICAL
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='Run content extraction jobs.')
@@ -38,7 +36,7 @@ if __name__ == '__main__':
     round_size = n_documents / args.k
 
     for i in range(args.k):
-        print 'Round %d/%d...' % (i+1, args.k)
+        print '\nRound %d/%d...' % (i+1, args.k)
         test_documents = documents[i*round_size:(i+1)*round_size]
         training_documents = documents[:i*round_size] + documents[(i+1)*round_size:]
 
