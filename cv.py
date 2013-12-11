@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 from readability import L3SDocumentLoader, DragnetDocumentLoader
 from readability import DensitometricFeatureExtractor, RelativePositionFeatureExtractor, IndicativeClassTokenFeatureExtractor
 from readability import ContentExtractionModel, Evaluator
+from third_party import L3SModel, DragnetModel
 
 import logging
 logging.current_level = logging.CRITICAL
@@ -12,6 +13,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dataset', default='L3S', help='set which dataset to use (L3S or Draget)')
     parser.add_argument('-l', '--limit', type=int, default=0, help='maximum number of documents to use, default to all')
     parser.add_argument('-k', type=int, default=5, help='cross validation parameter K')
+    parser.add_argument('-m', '--model', default=None, help='which model to use <Pure|L3S|Dragnet>')
 
     parser.add_argument('-ft', '--shallow-text', action='store_true', default=False, help='use shallow text features')
     parser.add_argument('-fp', '--relative-position', action='store_true', default=False, help='use relative position features')
@@ -20,15 +22,20 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    feature_extractors = []
-    if args.shallow_text:
-        feature_extractors.append(DensitometricFeatureExtractor)
-    if args.relative_position:
-        feature_extractors.append(RelativePositionFeatureExtractor)
-    if args.indicative_token:
-        feature_extractors.append(IndicativeClassTokenFeatureExtractor(args.indicative_token_number))
+    if args.model == 'L3S':
+        model = L3SModel()
+    elif args.model == 'Dragnet':
+        model = DragnetModel()
+    else:
+        feature_extractors = []
+        if args.shallow_text:
+            feature_extractors.append(DensitometricFeatureExtractor)
+        if args.relative_position:
+            feature_extractors.append(RelativePositionFeatureExtractor)
+        if args.indicative_token:
+            feature_extractors.append(IndicativeClassTokenFeatureExtractor(args.indicative_token_number))
 
-    model = ContentExtractionModel(feature_extractors, unique=True)
+        model = ContentExtractionModel(feature_extractors, unique=True)
 
     loader = L3SDocumentLoader(args.dataset_dir) if args.dataset == 'L3S' else DragnetDocumentLoader(args.dataset_dir)
     documents = loader.get_documents(args.limit)

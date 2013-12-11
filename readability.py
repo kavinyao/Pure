@@ -8,9 +8,9 @@ from sklearn import svm
 from collections import Counter
 from lxml.html.clean import Cleaner
 
-from util import extract_css_tokens
 from lcs import check_inclusion
 from logging import log, WARNING, CRITICAL
+from util import extract_css_tokens, str_to_unicode
 
 POSITIVE_LABEL = 1
 NEGATIVE_LABEL = 0
@@ -90,7 +90,7 @@ class Document(object):
         self.original = original
 
         log('loading %s' % self)
-        self.html_doc = HTMLLoader.from_file(original)
+        self.html_doc, self.html_string = HTMLLoader.from_file(original, True)
         self.main_content = self._get_main_content(annotated)
 
         # for collecting text blocks
@@ -223,20 +223,7 @@ class L3SDocument(Document):
 def read_unicode_from(file):
     with open(file) as f:
         content = f.read()
-        try:
-            return content.decode('utf-8')
-        except UnicodeDecodeError:
-            try:
-                return content.decode('utf-16')
-            except UnicodeDecodeError:
-                try:
-                    return content.decode('windows-1252')
-                except UnicodeDecodeError:
-                    try:
-                        return content.decode('iso-8859-1')
-                    except UnicodeDecodeError:
-                        log('Warning: cannot detect encoding of %f, using utf-8 ignore mode...' % file, WARNING)
-                        return content.decode('utf-8', 'ignore')
+        return str_to_unicode(content)
 
 
 class DragnetDocument(Document):
@@ -467,7 +454,8 @@ class IndicativeClassTokenFeatureExtractor(object):
 
     def train(self, documents):
         self.nb.train(documents)
-        _, most_negative = self.nb.most_indicative_tokens(self.n_features)
+        most_negative = self.nb.most_weighted_negative_tokens(self.n_features)
+        print most_negative
         if len(most_negative) != self.n_features:
             log('Warning: not enough negative tokens', WARNING)
         self.negative_tokens = [t for t, _ in most_negative]
@@ -490,12 +478,15 @@ class HTMLLoader(object):
     XML_ENCODING_DECLARATION = re.compile(r'^\s*<\?xml[^>]*?>', re.I);
 
     @staticmethod
-    def from_file(filename):
-        html = read_unicode_from(filename)
+    def from_file(filename, also_return_string=False):
+        html_string = read_unicode_from(filename)
         # lxml doesn't like xml encoding declaration in unicode html
-        html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html)
+        html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html_string)
         html = basic_cleaner.clean_html(html)
-        return lxml.html.document_fromstring(html)
+        if also_return_string:
+            return lxml.html.document_fromstring(html), html_string
+        else:
+            return lxml.html.document_fromstring(html)
 
 
 class MatrixScaler(object):
@@ -652,10 +643,10 @@ class NaiveBayesModel(object):
         self.n_tokens = n_tokens
         self.indices = indices
 
-        positive_counts = labels.dot(train_matrix) + 1;
-        self.positive_probs = positive_counts / np.sum(positive_counts)
-        negative_counts = (1-labels).dot(train_matrix) + 1;
-        self.negative_probs = negative_counts / np.sum(negative_counts)
+        self.positive_counts = labels.dot(train_matrix) + 1;
+        self.positive_probs = self.positive_counts / np.sum(self.positive_counts)
+        self.negative_counts = (1-labels).dot(train_matrix) + 1;
+        self.negative_probs = self.negative_counts / np.sum(self.negative_counts)
 
         log('>>> NB Training is over', CRITICAL)
 
@@ -665,6 +656,11 @@ class NaiveBayesModel(object):
         most_positive = tuple((self.token_list[i], p_to_n[i]) for i in indices[-n:][::-1])
         most_negative = tuple((self.token_list[i], p_to_n[i]) for i in indices[:n])
         return (most_positive, most_negative)
+
+    def most_weighted_negative_tokens(self, n=10):
+        n_to_p = np.log(self.negative_probs / self.positive_probs) * self.negative_counts
+        indices = n_to_p.argsort()
+        return tuple((self.token_list[i], n_to_p[i]) for i in indices[-n:][::-1])
 
     def predict(self, document):
         blocks = document.get_blocks()

@@ -1,6 +1,26 @@
 import re
 from collections import Counter
 
+def str_to_unicode(content):
+    if isinstance(content, unicode):
+        return content
+
+    try:
+        return content.decode('utf-8')
+    except UnicodeDecodeError:
+        try:
+            return content.decode('utf-16')
+        except UnicodeDecodeError:
+            try:
+                return content.decode('windows-1252')
+            except UnicodeDecodeError:
+                try:
+                    return content.decode('iso-8859-1')
+                except UnicodeDecodeError:
+                    log('Warning: cannot detect encoding of %f, using utf-8 ignore mode...' % file, WARNING)
+                    return content.decode('utf-8', 'ignore')
+
+
 CAPITAL_WORD_PATTERN = re.compile(r'([A-Z][a-z]+)')
 DIGIT_CLASS = '<DIGITS>'
 LONG_CLASS = '<LONG>'
