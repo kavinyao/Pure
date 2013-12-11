@@ -6,8 +6,10 @@ import lxml.html
 import numpy as np
 from sklearn import svm
 from collections import Counter
-from util import extract_css_tokens
 from lxml.html.clean import Cleaner
+
+from util import extract_css_tokens
+from lcs import check_inclusion
 
 POSITIVE_LABEL = 1
 NEGATIVE_LABEL = 0
@@ -126,7 +128,7 @@ class Document(object):
             print '[WARN]: nothing extracted from %s, returning all content' % self
             return self.normalize_html_text(self.html_doc.body.text_content())
         else:
-            return '\n'.join(article_blocks)
+            return self.normalize_html_text('\n'.join(article_blocks))
 
     def get_main_content(self):
         return self.main_content
@@ -263,15 +265,20 @@ class Evaluator(object):
     def evaluate(self):
         self.precisions = []
         self.recalls = []
+        self.lcs_precisions = []
+        self.lcs_recalls = []
 
         for doc in self.documents:
             classes = self.model.predict(doc)
             extracted_content = doc.extract_article(classes)
             main_content = doc.get_main_content()
 
+            e_list = extracted_content.split()
+            m_list = main_content.split()
+
             # do token-level comparison
-            e_words = set(extracted_content.split())
-            m_words = set(main_content.split())
+            e_words = set(e_list)
+            m_words = set(m_list)
             common_words = e_words.intersection(m_words)
             if not common_words:
                 common_words = set(['CANNOT_BELIEVE_THIS'])
@@ -279,6 +286,16 @@ class Evaluator(object):
 
             self.precisions.append(1.0*len(common_words)/len(e_words))
             self.recalls.append(1.0*len(common_words)/len(m_words))
+
+            # do common subsequence comparison
+            flags = check_inclusion(e_list, m_list)
+            n_common = sum(flags)
+            if n_common == 0:
+                n_common = 1
+                print 'WARN: no common sequence extracted for', doc
+
+            self.lcs_precisions.append(1.0*n_common/len(e_list))
+            self.lcs_recalls.append(1.0*n_common/len(m_list))
 
     @staticmethod
     def average(numbers):
@@ -292,6 +309,11 @@ class Evaluator(object):
         print 'Average precision', Evaluator.average(self.precisions)
         print 'Average recall', Evaluator.average(self.recalls)
         print 'Average F-measure', Evaluator.average(f_measures)
+
+        lcs_f_measures = [2/(1/p+1/r) for p,r in zip(self.lcs_precisions, self.lcs_recalls)]
+        print 'Average LCS precision', Evaluator.average(self.lcs_precisions)
+        print 'Average LCS recall', Evaluator.average(self.lcs_recalls)
+        print 'Average LCS F-measure', Evaluator.average(lcs_f_measures)
 
         if out_file:
             with open(out_file, 'w') as pd:
