@@ -265,7 +265,12 @@ class Evaluator(object):
         lcs_recalls = []
 
         for doc in test_docs:
-            extracted_content = self.model.predict(doc)
+            # TODO: ugly
+            if self.model.predict_classes():
+                classes = self.model.predict(doc)
+                extracted_content = doc.extract_article(classes)
+            else:
+                extracted_content = self.model.predict(doc)
             main_content = doc.get_main_content()
 
             e_list = extracted_content.encode('utf-8').split()
@@ -607,6 +612,9 @@ class ContentExtractionModel(object):
         self.svm.fit(scaled_features, labels)
 
         log('>>> Training is over', CRITICAL)
+
+    def predict_classes(self):
+        return True
 
     def predict(self, document):
         _, features = self.extract_features([document])
