@@ -7,7 +7,7 @@ class L3SModel(object):
         pass
 
     def predict(self, document):
-        s = kohlschuetter_model.analyze(document.html_string.encode('utf-8'))
+        s = kohlschuetter_model.analyze(document.html_string)
         return str_to_unicode(s)
 
 class DragnetModel(object):
@@ -15,5 +15,5 @@ class DragnetModel(object):
         pass
 
     def predict(self, document):
-        s = kohlschuetter_css_weninger_model.analyze(document.html_string.encode('utf-8'))
+        s = kohlschuetter_css_weninger_model.analyze(document.html_string)
         return str_to_unicode(s)

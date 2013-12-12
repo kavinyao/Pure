@@ -8,7 +8,7 @@ from sklearn import svm
 from collections import Counter
 from lxml.html.clean import Cleaner
 
-from lcs import check_inclusion
+from dragnet.lcs import check_inclusion
 from logging import log, WARNING, CRITICAL
 from util import extract_css_tokens, str_to_unicode
 
@@ -90,7 +90,9 @@ class Document(object):
         self.original = original
 
         log('loading %s' % self)
-        self.html_doc, self.html_string = HTMLLoader.from_file(original, True)
+        self.html_doc = HTMLLoader.from_file(original)
+        with open(original) as orig:
+            self.html_string = orig.read()
         self.main_content = self._get_main_content(annotated)
 
         # for collecting text blocks
@@ -263,12 +265,11 @@ class Evaluator(object):
         lcs_recalls = []
 
         for doc in test_docs:
-            classes = self.model.predict(doc)
-            extracted_content = doc.extract_article(classes)
+            extracted_content = self.model.predict(doc)
             main_content = doc.get_main_content()
 
-            e_list = extracted_content.split()
-            m_list = main_content.split()
+            e_list = extracted_content.encode('utf-8').split()
+            m_list = main_content.encode('utf-8').split()
 
             # do token-level comparison
             e_words = set(e_list)
@@ -278,7 +279,10 @@ class Evaluator(object):
                 common_words = set(['CANNOT_BELIEVE_THIS'])
                 log('WARN: no word predicted accurately for %s' % doc, WARNING)
 
-            precisions.append(1.0*len(common_words)/len(e_words))
+            if len(e_words):
+                precisions.append(1.0*len(common_words)/len(e_words))
+            else:
+                precisions.append(0.0)
             recalls.append(1.0*len(common_words)/len(m_words))
 
             # do common subsequence comparison
@@ -478,15 +482,12 @@ class HTMLLoader(object):
     XML_ENCODING_DECLARATION = re.compile(r'^\s*<\?xml[^>]*?>', re.I);
 
     @staticmethod
-    def from_file(filename, also_return_string=False):
+    def from_file(filename):
         html_string = read_unicode_from(filename)
         # lxml doesn't like xml encoding declaration in unicode html
         html = HTMLLoader.XML_ENCODING_DECLARATION.sub('', html_string)
         html = basic_cleaner.clean_html(html)
-        if also_return_string:
-            return lxml.html.document_fromstring(html), html_string
-        else:
-            return lxml.html.document_fromstring(html)
+        return lxml.html.document_fromstring(html)
 
 
 class MatrixScaler(object):
